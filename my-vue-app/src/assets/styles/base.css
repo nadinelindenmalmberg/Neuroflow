@@ -1,0 +1,43 @@
+:root {
+  --color-background: #191a23;
+  --color-surface: #1f202b;
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-text: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --glass-background: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --sidebar-width: 15rem;
+}
+
+/* Base styles */
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  margin: 0;
+  padding: 0;
+  font-family: sans-serif;
+}
+
+/* Animations */
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in-animation {
+  animation: fadeInScale 0.3s ease forwards;
+}
+
+/* Glass effect base */
+.glass {
+  background: var(--color-surface);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid var(--glass-border);
+  border-radius: 0.75rem;
+}

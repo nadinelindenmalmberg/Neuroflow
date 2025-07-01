@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Unified Dashboard</title>
+
+    <!-- Tailwind CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      /* A simple fade+scale in keyframe */
+      @keyframes fadeInScale {
+        0% {
+          opacity: 0;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      /* Add a class that applies the fadeInScale animation */
+      .fade-in-animation {
+        animation: fadeInScale 0.3s ease forwards;
+      }
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+
+    <!-- ApexCharts & Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- FontAwesome for icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+    />
+  </head>
+
+  <body class="h-screen text-gray-100 font-sans">
+    <!-- Container for sidebar + main content -->
+    <div class="flex h-full">
+      <!-- Sidebar -->
+      <aside class="custom-aside">
+        <!-- App/Brand Name -->
+
+        <div class="mb-2 text-xl px-3 py-2flex items-center">
+          <i class="fa-solid fa-chart-line mr-2"></i> Neuroflow
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="flex flex-col gap-0.5">
+          <!-- Graphs links to the dashboard -->
+          <a
+            href="{{ url_for('dashboard') }}"
+            class="block py-2 px-3 rounded hover:bg-gray-800 group"
+          >
+            <i
+              class="fa-solid fa-chart-area mr-2 text-gray-500 group-hover:text-gray-100"
+            ></i>
+            Graphs
+          </a>
+          <!-- Explorer (placeholder link) -->
+          <a
+            href="{{ url_for('explorer') }}"
+            class="block py-2 px-3 rounded hover:bg-gray-800 group"
+          >
+            <i
+              class="fa-solid fa-compass text-gray-500 mr-2 group-hover:text-gray-100"
+            ></i>
+            Explorer
+          </a>
+
+          <!-- Integrations link -->
+          <a
+            href="{{ url_for('integrations') }}"
+            class="block py-2 px-3 rounded hover:bg-gray-800 group"
+          >
+            <i
+              class="fa-solid fa-plug text-gray-500 mr-2 group-hover:text-gray-100"
+            ></i>
+            Integrations
+          </a>
+        </nav>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="flex-1 p-5 overflow-y-auto">
+        <!-- Top Bar: Add Graph / Add Datapoint -->
+        <div class="mb-4 flex gap-2">
+          <a href="{{ url_for('new_graph') }}" class="button"> + Add Graph </a>
+          <a href="{{ url_for('add_data') }}" class="button">
+            + Add Datapoint</a
+          >
+        </div>
+
+        <!-- AI Analysis Modal (hidden by default) -->
+        <div
+          id="ai-analysis-modal"
+          class="modal-content hidden bg-gray-900 text-white p-5 rounded shadow-xl fixed left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[50%] max-w-[600px] max-h-[80vh] overflow-y-auto"
+          style="z-index: 1000"
+        >
+          <span
+            class="close-button absolute top-3 right-4 text-2xl cursor-pointer"
+            onclick="closeAiAnalysis()"
+            >&times;</span
+          >
+          <h1 class="text-xl font-bold mb-3">AI Analysis</h1>
+          <div id="ai-analysis-content"></div>
+        </div>
+
+        <!-- Graphs Container -->
+        <div class="graphs-container flex flex-wrap gap-6 mt-6">
+          {% if user_figs %} {% for item in user_figs %}
+          <div
+            class="glass p-6 rounded-xl space-y-4 graph-card bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] w-full max-w-[700px]"
+          >
+            <!-- Graph Header -->
+            <div class="graph-header flex items-center justify-between">
+              <h3 class="text-lg font-semibold">{{ item.title }}</h3>
+              <div class="graph-actions flex items-center gap-3">
+                <!-- AI Analyze Button -->
+                <button
+                  id="ai-analyze-btn-{{ loop.index }}"
+                  class="icon-button-wand"
+                  onclick="aiAnalyze({{ item.graph_id }}, {{ loop.index }})"
+                >
+                  <img
+                    src="{{ url_for('static', filename='images/magic-wand--filled 1.svg') }}"
+                    alt="Analyze"
+                    class="w-6 h-6"
+                  />
+                </button>
+                <!-- Edit Graph -->
+                <a
+                  href="{{ url_for('show_graph_table', graph_id=item.graph_id) }}"
+                  class="icon-button"
+                >
+                  <img
+                    src="{{ url_for('static', filename='images/edit.svg') }}"
+                    alt="Edit Icon"
+                    class="w-6 h-6"
+                  />
+                </a>
+                <!-- Delete Graph -->
+                <form
+                  action="{{ url_for('delete_graph', graph_id=item.graph_id) }}"
+                  method="POST"
+                >
+                  <button
+                    type="submit"
+                    class="icon-button"
+                    onclick="return confirm('Are you sure you want to delete this graph?');"
+                  >
+                    <img
+                      src="{{ url_for('static', filename='images/delete.svg') }}"
+                      alt="Delete Icon"
+                      class="w-6 h-6"
+                    />
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- Graph Container -->
+            <div id="user-graph-{{ loop.index }}" class="mt-4"></div>
+          </div>
+          {% endfor %} {% else %}
+          <p>No user-created graphs found.</p>
+          {% endif %}
+        </div>
+      </main>
+    </div>
+
+    <!-- JavaScript for AI Analysis -->
+    <script>
+      async function aiAnalyze(graphId, index) {
+        const button = document.getElementById(`ai-analyze-btn-${index}`);
+        const analysisContent = document.getElementById("ai-analysis-content");
+        const modal = document.getElementById("ai-analysis-modal");
+
+        button.disabled = true;
+        modal.classList.remove("hidden");
+        modal.classList.add("fade-in-animation"); // triggers the fade+scale
+        analysisContent.innerHTML = `
+  <div class="flex items-center justify-center space-x-2 animate-pulse">
+    <div
+      class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"
+    ></div>
+    <span>Loading AI Analysis...</span>
+  </div>
+`;
+        button.classList.add("opacity-50", "cursor-not-allowed");
+
+        try {
+          const response = await fetch(`/ai-analyze/${graphId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          });
+          if (!response.ok) {
+            throw new Error(
+              `Server error: ${response.status} ${response.statusText}`
+            );
+          }
+          const data = await response.json();
+
+          // Convert Markdown to HTML
+          analysisContent.innerHTML = marked.parse(data.ai_analysis);
+          modal.classList.remove("hidden");
+        } catch (error) {
+          analysisContent.textContent = "Error loading analysis.";
+        } finally {
+          button.disabled = false;
+          button.classList.remove("opacity-50", "cursor-not-allowed");
+        }
+      }
+
+      function closeAiAnalysis() {
+        document.getElementById("ai-analysis-modal").classList.add("hidden");
+      }
+    </script>
+
+    <!-- JavaScript for Graph Rendering -->
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        {% if user_figs %}
+          {% for item in user_figs %}
+            (function() {
+              var options = {
+                chart: {
+                  type: 'area',
+                  foreColor: '#ffffff',
+                  animations: { enabled: true },
+                },
+                series: {{ item.figure | default('[]') | safe }},
+                xaxis: {
+                  type: 'datetime'
+                },
+                fill: {
+                  type: 'gradient',
+                  gradient: {
+                    shadeIntensity: 1,
+                    inverseColors: false,
+                    opacityFrom: 0.6,
+                    opacityTo: 0,
+                    stops: [20, 100]
+                  }
+                },
+                colors: [
+                  '#FF4560',
+                  '#00E396',
+                  '#008FFB',
+                  '#FEB019',
+                  '#775DD0',
+                  '#FF66C3',
+                  '#26A69A',
+                  '#546E7A',
+                  '#D4526E',
+                  '#F86624'
+                ],
+                dataLabels: { enabled: false },
+                stroke: { curve: 'smooth', width: 2 },
+                grid: { show: false },
+                tooltip: {
+                  shared: true,
+                  theme: 'dark',
+                  y: {
+                    formatter: function(val) {
+                      return val !== null && val !== undefined
+                        ? val.toFixed(0)
+                        : '';
+                    }
+                  }
+                },
+                legend: {
+                  position: 'bottom',
+                  horizontalAlign: 'center',
+                  labels: { colors: 'white' }
+                }
+              };
+              var chart = new ApexCharts(
+                document.querySelector("#user-graph-{{ loop.index }}"),
+                options
+              );
+              chart.render();
+            })();
+          {% endfor %}
+        {% endif %}
+      });
+    </script>
+  </body>
+</html>

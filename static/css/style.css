@@ -1,0 +1,250 @@
+.glass {
+  background: #1f202b;
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  margin: 12px auto;
+  max-width: 1200px;
+  /* Using rem instead of px for consistency */
+  /* Removed box-shadow since current implementation doesn't use it */
+  /* Removed max-width since current implementation doesn't constrain width */
+}
+
+.glass-integrations {
+  background: #1f202b;
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 20px;
+  gap: 12px; /* 👈 Adds spacing between all child elements */
+  margin: 12px;
+  max-width: 1200px;
+}
+
+.glass-integrations img {
+  display: flex;
+  align-items: center;
+  max-width: 220px; /* 👈 Set your desired max width */
+  height: auto; /* 👈 Ensures aspect ratio is maintained */
+  margin-bottom: 1rem;
+}
+
+.custom-aside {
+  border-right: 1px solid #2a2b38;
+  width: 15rem; /* Equivalent to w-60 (60 * 0.25rem = 15rem) */
+  background-color: #16161d; /* Equivalent to bg-[#16161D] */
+  padding: 1rem; /* Equivalent to p-4 (4 * 0.25rem = 1rem) */
+  display: flex; /* Equivalent to flex */
+  flex-direction: column; /* Equivalent to flex-col */
+  gap: 1rem; /* Equivalent to gap-4 (4 * 0.25rem = 1rem) */
+}
+
+/* Force a smaller tooltip font size */
+.apexcharts-tooltip,
+.apexcharts-tooltip text,
+.apexcharts-tooltip tspan,
+.apexcharts-tooltip-label,
+.apexcharts-tooltip-series-group {
+  font-size: 12px !important; /* or whatever size you want */
+  font-family: sans-serif !important; /* or your preferred font */
+}
+
+.icon-button img {
+  width: 24px; /* Adjust the size */
+  height: 24px; /* Keep aspect ratio */
+  filter: invert(60%);
+}
+
+.icon-button-wand {
+  width: 24px; /* Adjust the size */
+  height: 24px; /* Keep aspect ratio */
+}
+
+.loading {
+  width: 24px; /* Adjust the size */
+  height: 24px; /* Keep aspect ratio */
+  filter: invert(60%);
+}
+
+.graph-header {
+  display: flex;
+  gap: 40px; /* Adds spacing between the graphs */
+  justify-content: space-between; /* Centers them on the page */
+  align-items: center;
+  flex-wrap: wrap; /* Ensures responsiveness on smaller screens */
+}
+
+.graphs-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 20px;
+  cursor: pointer;
+}
+.hidden {
+  display: none;
+}
+
+.graph-card {
+  flex: 1 1 calc(50% - 20px); /* Ensures two per row */
+  max-width: 700px;
+}
+
+/* Header Styling */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 20px;
+}
+
+/* Title Styling */
+.header h1 {
+  font-size: 1.875rem; /* Tailwind: text-3xl */
+  font-weight: bold;
+}
+
+/* Button Container */
+.header .button-container {
+  display: flex;
+  gap: 16px; /* Equivalent to Tailwind's space-x-4 */
+}
+
+/* Button Styling */
+.button {
+  display: inline-block;
+  padding: 8px 16px; /* Tailwind: px-4 py-2 */
+  color: white;
+  text-decoration: none;
+
+  background: rgba(
+    255,
+    255,
+    255,
+    0.05
+  ); /* Changed from 0.1 to 0.05 to match current */
+  backdrop-filter: blur(16px); /* Changed to stronger blur (lg in Tailwind) */
+  border: 1.5px solid rgba(255, 255, 255, 0.1); /* Changed border opacity from 0.2 to 0.1 */
+  border-radius: 0.75rem;
+  margin: 10glpx auto;
+  max-width: 1200px;
+  /* Using rem instead of px for consistency */
+  /* Removed box-shadow since current implementation doesn't use it */
+  /* Removed max-width since current implementation doesn't constrain width */
+}
+
+.graph-actions {
+  display: flex;
+  gap: 12px; /* Adds spacing between the graphs */
+  justify-content: center; /* Centers them on the page */
+  align-items: flex-start;
+  flex-wrap: wrap; /* Ensures responsiveness on smaller screens */
+}
+
+.button.blue:hover {
+  background-color: #2563eb;
+} /* Tailwind: hover:bg-blue-600 */
+
+.button.green {
+  background-color: #10b981;
+} /* Tailwind: bg-green-500 */
+.button.green:hover {
+  background-color: #059669;
+} /* Tailwind: hover:bg-green-600 */
+
+.button.gray {
+  background-color: #6b7280;
+} /* Tailwind: bg-gray-500 */
+.button.gray:hover {
+  background-color: #4b5563;
+} /* Tailwind: hover:bg-gray-600 */
+
+body {
+  background-color: #191a23;
+  color: white;
+  margin: 0;
+  padding: 0;
+}
+a {
+  color: #fff;
+}
+h1,
+h2,
+h3 {
+  color: white;
+}
+
+.modal-content {
+  display: none; /* Initially hidden */
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 600px;
+  max-height: 80vh; /* Ensure modal doesn't overflow */
+  background: rgba(20, 20, 20, 0.95); /* Dark background */
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column; /* Ensures elements stack */
+  align-items: flex-start; /* Aligns text to left */
+  overflow-y: auto; /* Enables scrolling inside */
+}
+
+.modal-content h1,
+.modal-content h2,
+.modal-content h3 {
+  font-size: 1.5rem; /* Adjust as needed */
+  font-weight: bold; /* Ensure it appears as a heading */
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.modal-content ul {
+  list-style-type: disc !important; /* Ensures bullets */
+  padding-left: 20px; /* Indent the list */
+}
+
+.modal-content ol {
+  list-style-type: decimal !important; /* Ensures numbers */
+  padding-left: 20px;
+}
+
+.modal-content li {
+  margin-bottom: 5px; /* Adds spacing between items */
+}
+
+#ai-analysis-content {
+  text-align: left;
+}
+
+.hidden {
+  display: none;
+}
+
+.pulse-text {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}

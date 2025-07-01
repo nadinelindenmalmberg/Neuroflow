@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Create New Graph</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+  </head>
+  <body
+    class="bg-[#191A23] text-gray-200 flex items-center justify-center min-h-screen"
+  >
+    <div class="bg-[#16161D] p-8 rounded-lg shadow-lg w-full max-w-md">
+      <h1 class="text-2xl font-bold mb-6 text-center">Create a New Graph</h1>
+      <form method="POST" class="space-y-4">
+        <div>
+          <label for="name" class="block text-sm font-medium text-gray-300"
+            >Graph Name:</label
+          >
+          <input
+            type="text"
+            id="name"
+            name="name"
+            required
+            class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label
+            for="description"
+            class="block text-sm font-medium text-gray-300"
+            >Description:</label
+          >
+          <input
+            type="text"
+            id="description"
+            name="description"
+            class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          class="button w-full hover:bg-gray-800 transition-colors"
+        >
+          Add Graph
+        </button>
+      </form>
+      <p class="mt-4 text-center">
+        <a
+          href="{{ url_for('dashboard') }}"
+          class="text-blue-400 hover:underline"
+          >Back to Dashboard</a
+        >
+      </p>
+    </div>
+  </body>
+</html>

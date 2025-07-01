@@ -1,0 +1,174 @@
+/* Sidebar */
+.custom-aside {
+  border-right: 1px solid #2a2b38;
+  width: var(--sidebar-width);
+  min-height: 100vh;
+  background-color: #16161d;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  height: 100%;
+}
+
+.custom-aside a {
+  text-decoration: none;
+  color: var(--color-text);
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.custom-aside a:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.custom-aside i {
+  width: 1.5rem;
+  text-align: center;
+}
+
+/* Buttons */
+.button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: #1f202b;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  color: var(--color-text);
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Icon buttons */
+.icon-button,
+.icon-button-wand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0.375rem;
+  border-radius: 0.5rem;
+  background: #1f202b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.icon-button:hover,
+.icon-button-wand:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.icon-button img,
+.icon-button-wand img {
+  width: 1.25rem;
+  height: 1.25rem;
+  filter: invert(60%);
+}
+
+/* Graph container */
+.graphs-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100%, 1fr));
+  gap: 1.5rem;
+  padding: 1rem;
+}
+
+@media (min-width: 1200px) {
+  .graphs-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Graph card */
+.graph-card {
+  background: #1f202b;
+  backdrop-filter: blur(16px);
+  padding: 1.5rem;
+  width: 100%;
+  min-width: 0; /* Prevents overflow in grid layouts */
+  position: relative;
+  overflow: hidden;
+}
+
+.graph-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 255, 255, 0.03),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Modal */
+.modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 600px;
+  max-height: 80vh;
+  background: #1f202b;
+  color: var(--color-text);
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+/* ApexCharts customization */
+.apexcharts-tooltip {
+  background: #1f202b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  font-size: 0.875rem !important;
+}
+
+.apexcharts-legend-text {
+  color: var(--color-text) !important;
+  font-size: 0.875rem !important;
+}
+
+/* Chart controls */
+.apexcharts-toolbar {
+  z-index: 10 !important;
+}
+
+.apexcharts-menu {
+  background: #1f202b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.apexcharts-menu-item {
+  color: white !important;
+}
+
+.apexcharts-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Graph header specific styling */
+.graph-header h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0;
+}
