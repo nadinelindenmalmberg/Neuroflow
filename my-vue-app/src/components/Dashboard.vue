@@ -13,9 +13,9 @@
             <img
               src="../assets/images/chart--area-smooth.svg"
               class="nav-icon"
-              alt="Graphs"
+              alt="Dashboard"
             />
-            <span>Graphs</span>
+            <span>Dashboard</span>
           </router-link>
           <router-link to="/explorer" class="nav-link">
             <img
@@ -162,7 +162,7 @@ import NewGraphForm from "./NewGraphForm.vue";
 import AddDataForm from "./AddDataForm.vue";
 import GraphEditor from "./GraphEditor.vue";
 import { getApiUrl } from "../config";
-import neuroflowLogo from "/Users/lukaslindenmalmberg/Lukas Projects/Oura/my-vue-app/src/assets/images/ChatGPT_Image_Apr_5__2025__01_36_36_PM-removebg-preview 1.svg";
+import neuroflowLogo from "../assets/images/ChatGPT_Image_Apr_5__2025__01_36_36_PM-removebg-preview 1.svg";
 
 const router = useRouter();
 
@@ -207,16 +207,7 @@ function renderCharts() {
       animations: { enabled: true },
       background: "transparent",
       toolbar: {
-        show: true,
-        tools: {
-          download: true,
-          selection: true,
-          zoom: true,
-          zoomin: true,
-          zoomout: true,
-          pan: true,
-          reset: true,
-        },
+        show: false,
       },
       zoom: {
         enabled: true,
@@ -240,6 +231,9 @@ function renderCharts() {
       labels: {
         style: {
           colors: "#999",
+        },
+        formatter: (val) => {
+          return val !== null && val !== undefined ? Math.round(val).toLocaleString() : "";
         },
       },
     },
@@ -283,15 +277,18 @@ function renderCharts() {
         fontSize: "12px",
       },
     },
-    legend: {
-      position: "bottom",
-      horizontalAlign: "center",
-      labels: { colors: "white" },
-      itemMargin: {
-        horizontal: 10,
-        vertical: 5,
+          legend: {
+        position: "bottom",
+        horizontalAlign: "center",
+        labels: { 
+          colors: "rgba(255, 255, 255, 0.6)",
+          useSeriesColors: false
+        },
+        itemMargin: {
+          horizontal: 10,
+          vertical: 5,
+        },
       },
-    },
   };
 
   graphs.value.forEach((graph, index) => {
@@ -401,7 +398,7 @@ function handleGraphCreated(newGraph) {
           animations: { enabled: true },
           background: "transparent",
           toolbar: {
-            show: true,
+            show: false,
           },
           zoom: {
             enabled: true,
@@ -415,7 +412,12 @@ function handleGraphCreated(newGraph) {
           axisTicks: { show: false },
         },
         yaxis: {
-          labels: { style: { colors: "#999" } },
+          labels: { 
+            style: { colors: "#999" },
+            formatter: (val) => {
+              return val !== null && val !== undefined ? Math.round(val).toLocaleString() : "";
+            },
+          },
         },
         fill: {
           type: "gradient",
@@ -442,7 +444,10 @@ function handleGraphCreated(newGraph) {
         legend: {
           position: "bottom",
           horizontalAlign: "center",
-          labels: { colors: "white" },
+          labels: { 
+            colors: "rgba(255, 255, 255, 0.6)",
+            useSeriesColors: false
+          },
         },
       };
 
@@ -656,14 +661,15 @@ function handleGraphUpdated() {
 }
 
 .graph-header h3 {
-  font-size: 1.1rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  font-weight: 400;
   margin: 0;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .graph-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .chart-container {
@@ -692,9 +698,9 @@ function handleGraphUpdated() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0.375rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0.25rem;
   transition: all 0.2s ease;
   cursor: pointer;
   background: transparent;
@@ -704,8 +710,8 @@ function handleGraphUpdated() {
 
 .icon-button img,
 .icon-button-wand img {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.125rem;
+  height: 1.125rem;
   filter: invert(60%);
   background: transparent;
   border: none;

@@ -8,6 +8,7 @@ class Graph(db.Model):
     name = db.Column(db.String(100), nullable=False) #creates the name column
     description = db.Column(db.String(250)) #creates the description column
     is_temporary = db.Column(db.Boolean, default=True)  # True if the graph is temporary
+    tracked_metrics = db.Column(db.Text)  # JSON string of metrics this graph should display
     data_points = db.relationship("DataPoint", backref="graph", lazy=True) #defines that the graph has a relationship to datapoints
 
 class DataPoint(db.Model):

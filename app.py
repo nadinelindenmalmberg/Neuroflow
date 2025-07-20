@@ -67,20 +67,22 @@ keys_in_minutes = [
 @app.route('/api/graphs', methods=['GET'])
 def get_graphs(): 
     try:
-    all_graphs = Graph.query.filter(or_(Graph.is_temporary==None, Graph.is_temporary==False)).all()
+        all_graphs = Graph.query.filter(or_(Graph.is_temporary==None, Graph.is_temporary==False)).all()
 
-    graph_list = []
+        graph_list = []
 
-    for g in all_graphs: 
-        fig_for_graph = create_plot_for_graph(g)
-        graph_list.append({
-            "title": g.name,
-            "figure": fig_for_graph,
-            "graph_id": g.id
-            })
-    return jsonify(graph_list)
+        for g in all_graphs: 
+            fig_for_graph = create_plot_for_graph(g)
+            graph_list.append({
+                "title": g.name,
+                "figure": fig_for_graph,
+                "graph_id": g.id
+                })
+        return jsonify(graph_list)
     except Exception as e:
-        print(f"Error in get_graphs: {str(e)}")
+        print(f"ERROR in get_graphs: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/api/graphs/<int:graph_id>', methods=['DELETE'])
@@ -200,20 +202,51 @@ def new_graph():
     return render_template('new_graph.html')
 
 def create_plot_for_graph(graph_obj):
-    points = sorted(graph_obj.data_points, key=lambda dp: (dp.metric_name, dp.date)) # 1. Sort data points by (metric_name, date) so each metric's data is chronological
+    # Check if this graph uses tracked metrics (dynamic) or static data points (legacy)
+    if graph_obj.tracked_metrics:
+        # Dynamic graph: fetch live data for tracked metrics
+        try:
+            tracked_metrics_list = json.loads(graph_obj.tracked_metrics)
+            metrics_data = {}
+            
+            for metric in tracked_metrics_list:
+                # Get all data points for this metric from any graph
+                live_points = DataPoint.query.filter_by(metric_name=metric).all()
+                sorted_points = sorted(live_points, key=lambda dp: dp.date)
+                
+                metrics_data[metric] = []
+                for dp in sorted_points:
+                    metrics_data[metric].append({
+                        "x": dp.date.strftime("%Y-%m-%d"),
+                        "y": dp.value
+                    })
+                    
+            final_series = []
+            for metric_name, data_points in metrics_data.items():
+                final_series.append({
+                    "name": metric_name,
+                    "data": data_points
+                })
+            
+            return final_series
+            
+        except (json.JSONDecodeError, AttributeError):
+            # Fall back to static data if JSON parsing fails
+            pass
+    
+    # Legacy graph: use static data points
+    points = sorted(graph_obj.data_points, key=lambda dp: (dp.metric_name, dp.date))
     if not points:
-        return [
-    {
-        "name": "Empty",
-        "data": []
-    }
-]
+        return [{
+            "name": "Empty",
+            "data": []
+        }]
+        
     metrics_data = {}
     for dp in points:
         metric = dp.metric_name
         if metric not in metrics_data:
             metrics_data[metric] = []
-        # Convert the date to a string for JavaScript
         metrics_data[metric].append({
             "x": dp.date.strftime("%Y-%m-%d"),
             "y": dp.value
@@ -389,19 +422,10 @@ def add_temp_graph():
     
     temp_graph = Graph.query.filter_by(id=temp_graph_id, is_temporary=True).first()
     if not temp_graph:
-        return redirect(url_for('explorer'))  # or handle error
+        return redirect(url_for('explorer'))
     
-    for metric in metrics_list: 
-        original_points = DataPoint.query.filter_by(metric_name=metric).all()
-        for op in original_points: 
-            new_dp = DataPoint(
-                date = op.date, 
-                value = op.value, 
-                metric_name = op.metric_name,
-                graph_id = temp_graph.id
-            )
-            db.session.add(new_dp)
-
+    # Store tracked metrics instead of copying data points
+    temp_graph.tracked_metrics = json.dumps(metrics_list)
     temp_graph.is_temporary = False
     db.session.commit()    
     session.pop('temp_graph_id', None)
@@ -458,27 +482,16 @@ def api_save_explorer():
     if not metrics_list:
         return jsonify({'error': 'No metrics selected'}), 400
 
-    # Create a new permanent graph
+    # Create a new permanent graph with tracked metrics
     new_graph = Graph(
         name=f"Explorer Graph ({', '.join(metrics_list)})",
         description=f"Graph created from explorer with metrics: {', '.join(metrics_list)}",
-        is_temporary=False
+        is_temporary=False,
+        tracked_metrics=json.dumps(metrics_list)  # Store metrics as JSON
     )
     db.session.add(new_graph)
-
-    # Add selected metrics' data points
-    for metric in metrics_list:
-        original_points = DataPoint.query.filter_by(metric_name=metric).all()
-        for op in original_points:
-            new_dp = DataPoint(
-                date=op.date,
-                value=op.value,
-                metric_name=op.metric_name,
-                graph_id=new_graph.id
-            )
-            db.session.add(new_dp)
-
     db.session.commit()
+    
     return jsonify({'status': 'success', 'graph_id': new_graph.id})
 
 @app.route('/api/explorer/cancel', methods=['POST'])
@@ -499,8 +512,12 @@ def api_connect_oura():
         all_data = fetch_oura_data(token, start_date, end_date)
         flattened = flatten_oura_chunks(all_data)
         cleaned = clean_data(flattened)
-        store_oura_data(cleaned)
-        return jsonify({'message': 'Oura data synced successfully'}), 200
+        rows_inserted = store_oura_data(cleaned)
+        
+        if rows_inserted > 0:
+            return jsonify({'message': f'Oura data synced successfully! Added {rows_inserted} new data points.'}), 200
+        else:
+            return jsonify({'message': 'Sync completed, but no new data was found. All data may already be up to date.'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -550,6 +567,67 @@ def update_graph_details(graph_id):
         db.session.rollback()
         print(f"Error in update_graph_details: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+# Add utility function to convert existing graphs to tracked metrics
+def convert_static_graph_to_tracked(graph_id):
+    """Convert a static graph to use tracked metrics"""
+    try:
+        graph = Graph.query.get(graph_id)
+        if not graph or graph.tracked_metrics:
+            return False  # Already converted or doesn't exist
+        
+        # Get unique metrics from this graph's data points
+        existing_metrics = db.session.query(DataPoint.metric_name).filter_by(graph_id=graph_id).distinct().all()
+        metrics_list = [m[0] for m in existing_metrics]
+        
+        if not metrics_list:
+            return False  # No metrics to track
+        
+        # Store tracked metrics and clear static data points
+        graph.tracked_metrics = json.dumps(metrics_list)
+        DataPoint.query.filter_by(graph_id=graph_id).delete()
+        
+        db.session.commit()
+        return True
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error converting graph {graph_id}: {str(e)}")
+        return False
+
+@app.route('/api/graphs/<int:graph_id>/convert-to-dynamic', methods=['POST'])
+def convert_graph_to_dynamic(graph_id):
+    """API endpoint to convert a static graph to dynamic tracked metrics"""
+    try:
+        success = convert_static_graph_to_tracked(graph_id)
+        if success:
+            return jsonify({'message': f'Graph {graph_id} converted to dynamic tracking successfully'})
+        else:
+            return jsonify({'error': 'Failed to convert graph or graph already dynamic'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/convert-all-graphs', methods=['POST'])
+def convert_all_graphs_to_dynamic():
+    """Convert all existing static graphs to dynamic tracked metrics"""
+    try:
+        static_graphs = Graph.query.filter(
+            Graph.tracked_metrics.is_(None),
+            Graph.is_temporary != True
+        ).all()
+        
+        converted_count = 0
+        for graph in static_graphs:
+            if convert_static_graph_to_tracked(graph.id):
+                converted_count += 1
+        
+        return jsonify({
+            'message': f'Successfully converted {converted_count} graphs to dynamic tracking',
+            'converted_count': converted_count
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 """ ###for testing: 
 response = requests.get(url, headers=headers, params=params)

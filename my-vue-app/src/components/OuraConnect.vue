@@ -37,8 +37,15 @@
         />
       </div>
 
-      <button type="submit" class="btn btn-primary">Sync data</button>
+      <button type="submit" class="btn btn-primary" :disabled="isLoading">
+        <span v-if="isLoading">Syncing...</span>
+        <span v-else>Sync data</span>
+      </button>
     </form>
+
+    <div v-if="errorMessage" class="alert alert-danger mt-3">
+      {{ errorMessage }}
+    </div>
 
     <p class="mt-3">
       <router-link to="/integrations">Back to Integrations</router-link>
@@ -57,6 +64,9 @@ const formData = ref({
   start_date: "",
   end_date: "",
 });
+
+const isLoading = ref(false);
+const errorMessage = ref("");
 
 const handleSubmit = async () => {
   isLoading.value = true;
@@ -129,6 +139,23 @@ const handleSubmit = async () => {
 
 .btn-primary:hover {
   background-color: #2563eb;
+}
+
+.btn-primary:disabled {
+  background-color: #6b7280;
+  cursor: not-allowed;
+}
+
+.alert {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.375rem;
+}
+
+.alert-danger {
+  background-color: #dc2626;
+  color: white;
+  border: 1px solid #b91c1c;
 }
 
 a {

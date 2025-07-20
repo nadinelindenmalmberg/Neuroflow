@@ -77,16 +77,7 @@ const chartOptions = {
     animations: { enabled: true },
     background: "transparent",
     toolbar: {
-      show: true,
-      tools: {
-        download: true,
-        selection: true,
-        zoom: true,
-        zoomin: true,
-        zoomout: true,
-        pan: true,
-        reset: true,
-      },
+      show: false,
     },
     height: 500,
     width: "100%",
@@ -111,6 +102,9 @@ const chartOptions = {
     labels: {
       style: {
         colors: "#999",
+      },
+      formatter: (val) => {
+        return val !== null && val !== undefined ? Math.round(val).toLocaleString() : "";
       },
     },
   },
@@ -154,7 +148,10 @@ const chartOptions = {
   legend: {
     position: "bottom",
     horizontalAlign: "center",
-    labels: { colors: "white" },
+    labels: { 
+      colors: "rgba(255, 255, 255, 0.6)",
+      useSeriesColors: false
+    },
   },
 };
 
@@ -380,10 +377,11 @@ onBeforeUnmount(() => {
 }
 
 .graph-title {
-  font-size: 1.125rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  font-weight: 400;
   margin-bottom: 1rem;
   flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .chart-container {

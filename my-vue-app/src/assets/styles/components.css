@@ -71,8 +71,8 @@
 
 .icon-button img,
 .icon-button-wand img {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.125rem;
+  height: 1.125rem;
   filter: invert(60%);
 }
 
@@ -144,8 +144,8 @@
 }
 
 .apexcharts-legend-text {
-  color: var(--color-text) !important;
-  font-size: 0.875rem !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 0.8rem !important;
 }
 
 /* Chart controls */
@@ -166,9 +166,4 @@
   background: rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Graph header specific styling */
-.graph-header h3 {
-  font-size: 1.1rem;
-  font-weight: 500;
-  margin: 0;
-}
+
