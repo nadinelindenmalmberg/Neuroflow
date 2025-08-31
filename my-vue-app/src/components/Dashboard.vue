@@ -9,43 +9,44 @@
         </div>
 
         <nav class="sidebar-nav">
-          <router-link to="/" class="nav-link">
-            <img
-              src="../assets/images/chart--area-smooth.svg"
-              class="nav-icon"
-              alt="Dashboard"
-            />
+          <router-link to="/experiments" class="nav-link">
+            <FlaskConical class="nav-icon" size="20" />
+            <span>Experiments</span>
+          </router-link>
+          <router-link to="/dashboard" class="nav-link">
+            <BarChart3 class="nav-icon" size="20" />
             <span>Dashboard</span>
           </router-link>
           <router-link to="/explorer" class="nav-link">
-            <img
-              src="../assets/images/activity.svg"
-              class="nav-icon"
-              alt="Explorer"
-            />
+            <Activity class="nav-icon" size="20" />
             <span>Explorer</span>
           </router-link>
           <router-link to="/integrations" class="nav-link">
-            <img
-              src="../assets/images/flow.svg"
-              class="nav-icon"
-              alt="Integrations"
-            />
+            <GitBranch class="nav-icon" size="20" />
             <span>Integrations</span>
+          </router-link>
+          <router-link to="/upload" class="nav-link">
+            <Upload class="nav-icon" size="20" />
+            <span>Upload</span>
           </router-link>
         </nav>
       </aside>
 
       <!-- Main Content Area -->
       <main class="main-content">
-        <!-- Top Bar: Add Graph / Add Datapoint -->
-        <div class="action-buttons">
-          <button class="button" @click="showNewGraphForm = true">
-            + Add Graph
-          </button>
-          <button class="button" @click="showAddDataForm = true">
-            + Add Datapoint
-          </button>
+        <!-- Page Header -->
+        <div class="page-header">
+          <div class="header-content">
+            <h1 class="page-title">Dashboard</h1>
+            <div class="header-actions">
+              <button class="button" @click="showNewGraphForm = true">
+                + Add graph
+              </button>
+              <button class="button" @click="showAddDataForm = true">
+                + Add datapoint
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- New Graph Form Modal -->
@@ -154,10 +155,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from "vue";
-import { useRouter } from "vue-router";
+import { ref, onMounted, nextTick, watch } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import ApexCharts from "apexcharts";
 import { marked } from "marked";
+import { FlaskConical, BarChart3, Activity, GitBranch, Upload } from "lucide-vue-next";
 import NewGraphForm from "./NewGraphForm.vue";
 import AddDataForm from "./AddDataForm.vue";
 import GraphEditor from "./GraphEditor.vue";
@@ -165,6 +167,7 @@ import { getApiUrl } from "../config";
 import neuroflowLogo from "../assets/images/ChatGPT_Image_Apr_5__2025__01_36_36_PM-removebg-preview 1.svg";
 
 const router = useRouter();
+const route = useRoute();
 
 /**
  * Reactive state (replacing data())
@@ -178,19 +181,36 @@ const showGraphEditor = ref(false);
 const selectedGraphId = ref(null);
 
 /**
+ * Function to load graphs and render charts
+ */
+async function loadGraphs() {
+  try {
+    const response = await fetch(getApiUrl("graphs"));
+    const data = await response.json();
+    graphs.value = data;
+    nextTick(() => {
+      renderCharts();
+    });
+  } catch (error) {
+    console.error("Error loading graphs:", error);
+  }
+}
+
+/**
  * Lifecycle hook (replacing mounted())
  * Fetch data from Flask API on component mount
  */
 onMounted(() => {
-  fetch(getApiUrl("graphs"))
-    .then((res) => res.json())
-    .then((data) => {
-      graphs.value = data;
-      nextTick(() => {
-        renderCharts();
-      });
-    })
-    .catch((err) => console.error("Error fetching graphs:", err));
+  loadGraphs();
+});
+
+/**
+ * Watch for route changes to reload graphs when navigating back to dashboard
+ */
+watch(() => route.path, (newPath) => {
+  if (newPath === '/dashboard') {
+    loadGraphs();
+  }
 });
 
 /**
@@ -268,7 +288,9 @@ function renderCharts() {
     },
     tooltip: {
       shared: true,
+      intersect: false,
       theme: "dark",
+      followCursor: true,
       y: {
         formatter: (val) =>
           val !== null && val !== undefined ? val.toFixed(0) : "",
@@ -278,6 +300,7 @@ function renderCharts() {
       },
     },
           legend: {
+        show: true,
         position: "bottom",
         horizontalAlign: "center",
         labels: { 
@@ -439,15 +462,29 @@ function handleGraphCreated(newGraph) {
         },
         tooltip: {
           shared: true,
+          intersect: false,
           theme: "dark",
+          followCursor: true,
+          y: {
+            formatter: (val) =>
+              val !== null && val !== undefined ? val.toFixed(0) : "",
+          },
         },
         legend: {
-          position: "bottom",
-          horizontalAlign: "center",
+          show: true,
+          position: "right",
+          offsetX: 0,
+          offsetY: 0,
           labels: { 
             colors: "rgba(255, 255, 255, 0.6)",
             useSeriesColors: false
           },
+          itemMargin: {
+            horizontal: 5,
+            vertical: 8,
+          },
+          fontSize: "12px",
+          width: 200,
         },
       };
 
@@ -504,7 +541,7 @@ function handleGraphUpdated() {
 
 /* Sidebar */
 .sidebar {
-  width: 3.5rem; /* Collapsed width - icons only */
+  width: 15rem; /* Always expanded width */
   background-color: #16161d;
   border-right: 1px solid #2a2b38;
   display: flex;
@@ -517,11 +554,6 @@ function handleGraphUpdated() {
   height: 100vh;
   overflow: hidden;
   z-index: 40;
-  transition: width 0.2s ease;
-}
-
-.sidebar:hover {
-  width: 15rem; /* Expanded width on hover */
   box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
 }
 
@@ -540,17 +572,11 @@ function handleGraphUpdated() {
 
 .sidebar-title {
   margin-left: 0.75rem;
-  opacity: 0;
-  transform: translateX(-8px);
-  transition: all 0.2s ease;
+  opacity: 1;
+  transform: translateX(0);
   font-size: 1rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.8);
-}
-
-.sidebar:hover .sidebar-title {
-  opacity: 1;
-  transform: translateX(0);
 }
 
 .sidebar-nav {
@@ -576,12 +602,6 @@ function handleGraphUpdated() {
 }
 
 .nav-link span {
-  opacity: 0;
-  transform: translateX(-8px);
-  transition: all 0.2s ease;
-}
-
-.sidebar:hover .nav-link span {
   opacity: 1;
   transform: translateX(0);
 }
@@ -597,11 +617,11 @@ function handleGraphUpdated() {
 }
 
 .nav-icon {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   margin-right: 0.625rem;
   opacity: 0.7;
-  filter: invert(80%);
+  color: currentColor;
   flex-shrink: 0;
 }
 
@@ -615,13 +635,33 @@ function handleGraphUpdated() {
   flex: 1;
   padding: 1.25rem;
   overflow-y: auto;
-  margin-left: 3.5rem; /* Match collapsed sidebar width */
+  margin-left: 15rem; /* Match expanded sidebar width */
 }
 
-.action-buttons {
+/* Page Header */
+.page-header {
+  margin-bottom: 2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.page-title {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.header-actions {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
 }
 
 /* Graph grid */
@@ -681,16 +721,22 @@ function handleGraphUpdated() {
 .button {
   display: inline-flex;
   align-items: center;
-  padding: 0.5rem 1rem;
-  border-radius: 0.75rem;
-  color: white;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
   font-size: 0.875rem;
+  font-weight: 500;
   transition: all 0.2s ease;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  box-sizing: border-box;
 }
 
 .button:hover {
   background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .icon-button,
@@ -732,7 +778,6 @@ function handleGraphUpdated() {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(2px);
   display: flex;
   justify-content: center;
   align-items: center;

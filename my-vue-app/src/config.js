@@ -1,11 +1,11 @@
 const config = {
-  apiUrl: import.meta.env.VITE_API_URL || "http://localhost:5001",
+  apiUrl: import.meta.env.VITE_API_URL || "http://localhost:5174",
   apiBaseUrl: "/api",
 };
 
 export const getApiUrl = (endpoint) => {
-  const baseUrl = config.apiBaseUrl;
-  return `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+  const baseUrl = config.apiUrl;
+  return `${baseUrl}/api${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 };
 
 export default config;

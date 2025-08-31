@@ -1,14 +1,47 @@
 <template>
-  <div class="container mt-5">
-    <!-- Breadcrumb Navigation -->
-    <div class="breadcrumb">
-      <router-link to="/" class="breadcrumb-link">Dashboard</router-link>
-      <span class="breadcrumb-separator">/</span>
-      <span class="breadcrumb-current">Integrations</span>
-    </div>
+  <div class="integration-layout">
+    <!-- Main Navigation Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img :src="neuroflowLogo" alt="Neuroflow" class="sidebar-logo" />
+        <span class="sidebar-title">Neuroflow</span>
+      </div>
 
-    <h1>Integrations</h1>
-    <hr class="subtle-line" />
+      <nav class="sidebar-nav">
+        <router-link to="/experiments" class="nav-link">
+          <FlaskConical class="nav-icon" size="20" />
+          <span>Experiments</span>
+        </router-link>
+        <router-link to="/dashboard" class="nav-link">
+          <BarChart3 class="nav-icon" size="20" />
+          <span>Dashboard</span>
+        </router-link>
+        <router-link to="/explorer" class="nav-link">
+          <Activity class="nav-icon" size="20" />
+          <span>Explorer</span>
+        </router-link>
+        <router-link to="/integrations" class="nav-link router-link-active">
+          <GitBranch class="nav-icon" size="20" />
+          <span>Integrations</span>
+        </router-link>
+        <router-link to="/upload" class="nav-link">
+          <Upload class="nav-icon" size="20" />
+          <span>Upload</span>
+        </router-link>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">Integrations</h1>
+          <div class="header-actions">
+            <!-- Integration-specific actions can go here if needed -->
+          </div>
+        </div>
+      </div>
 
     <!-- Oura Integration Card -->
     <router-link to="/oura-connect" class="integration-card">
@@ -27,49 +60,149 @@
         against other metrics
       </p>
     </router-link>
+    </main>
   </div>
 </template>
 
 <script setup>
-// Component logic will go here if needed
+import { FlaskConical, BarChart3, Activity, GitBranch, Upload } from "lucide-vue-next";
+import neuroflowLogo from "../assets/images/ChatGPT_Image_Apr_5__2025__01_36_36_PM-removebg-preview 1.svg";
 </script>
 
 <style scoped>
-.container {
-  padding: 20px;
+.integration-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #191a23;
+  color: white;
 }
 
-.breadcrumb {
+/* Main Navigation Sidebar */
+.sidebar {
+  width: 15rem;
+  background-color: #16161d;
+  border-right: 1px solid #2a2b38;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0.75rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 40;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  padding: 1.25rem;
+  overflow-y: auto;
+  margin-left: 15rem; /* Match expanded sidebar width */
+}
+
+/* Page Header */
+.page-header {
+  margin-bottom: 2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.header-content {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.page-title {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sidebar-header {
   margin-bottom: 1.5rem;
-  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
-.breadcrumb-link {
-  color: #9ca3af;
+.sidebar-logo {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  margin-left: 0.75rem;
+  opacity: 1;
+  transform: translateX(0);
+  font-size: 1rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  width: 100%;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  color: rgba(255, 255, 255, 0.6);
   text-decoration: none;
+  transition: all 0.15s ease;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.breadcrumb-link:hover {
-  text-decoration: underline;
+.nav-link span {
+  opacity: 1;
+  transform: translateX(0);
 }
 
-.breadcrumb-separator {
-  margin: 0 0.5rem;
-  color: #6b7280;
+.nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.breadcrumb-current {
-  color: #fff;
-}
-
-.subtle-line {
-  border: none;
-  height: 1px;
+.nav-link.router-link-active {
   background-color: rgba(255, 255, 255, 0.1);
-  margin: 1rem 0;
+  color: white;
 }
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 0.625rem;
+  opacity: 0.7;
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.nav-link:hover .nav-icon,
+.nav-link.router-link-active .nav-icon {
+  opacity: 1;
+}
+
+/* Removed old container and subtle-line styles */
 
 .integration-card {
   background: linear-gradient(

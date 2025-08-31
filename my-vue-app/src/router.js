@@ -1,12 +1,23 @@
 import { createRouter, createWebHistory } from "vue-router";
 import Dashboard from "./components/Dashboard.vue";
+import Experiments from "./components/Experiments.vue";
 import Explorer from "./components/Explorer.vue";
 import Integration from "./components/integration.vue";
 import OuraConnect from "./components/OuraConnect.vue";
+import Upload from "./components/Upload.vue";
 
 const routes = [
   {
     path: "/",
+    redirect: "/experiments"
+  },
+  {
+    path: "/experiments",
+    name: "Experiments",
+    component: Experiments,
+  },
+  {
+    path: "/dashboard",
     name: "Dashboard",
     component: Dashboard,
   },
@@ -24,6 +35,11 @@ const routes = [
     path: "/oura-connect",
     name: "OuraConnect",
     component: OuraConnect,
+  },
+  {
+    path: "/upload",
+    name: "Upload",
+    component: Upload,
   },
 ];
 

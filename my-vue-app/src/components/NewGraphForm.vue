@@ -1,7 +1,6 @@
 <template>
-  <div class="new-graph-modal" v-if="isVisible">
-    <div class="modal-overlay" @click="closeModal"></div>
-    <div class="modal-wrapper">
+  <div class="modal-overlay" v-if="isVisible" @click="closeModal">
+    <div class="modal-wrapper" @click.stop>
       <div class="modal-container">
         <div class="modal-header">
           <h1 class="modal-title">Create a New Graph</h1>
@@ -34,6 +33,26 @@
               />
             </div>
 
+            <div class="form-group">
+              <label for="metrics">Tracked Metrics:</label>
+              <select
+                id="metrics"
+                v-model="formData.selectedMetrics"
+                multiple
+                class="form-input"
+                size="4"
+              >
+                <option 
+                  v-for="metric in availableMetrics" 
+                  :key="metric" 
+                  :value="metric"
+                >
+                  {{ metric }}
+                </option>
+              </select>
+              <small class="form-help">Hold Ctrl/Cmd to select multiple metrics</small>
+            </div>
+
             <div class="form-actions">
               <button type="button" class="cancel-button" @click="closeModal">
                 Cancel
@@ -55,6 +74,7 @@
 
 <script setup>
 import { ref, defineProps, defineEmits } from "vue";
+import { getApiUrl } from "../config.js";
 
 const props = defineProps({
   isVisible: {
@@ -68,16 +88,35 @@ const emit = defineEmits(["close", "graphCreated"]);
 const formData = ref({
   name: "",
   description: "",
+  selectedMetrics: [],
 });
 
+const availableMetrics = ref([]);
 const isSubmitting = ref(false);
 const error = ref("");
+
+// Fetch available metrics when component is mounted
+const fetchAvailableMetrics = async () => {
+  try {
+    const response = await fetch(getApiUrl("/metrics"));
+    if (response.ok) {
+      const data = await response.json();
+      availableMetrics.value = data.metrics || [];
+    }
+  } catch (err) {
+    console.error("Error fetching metrics:", err);
+  }
+};
+
+// Fetch metrics when component is created
+fetchAvailableMetrics();
 
 function closeModal() {
   // Reset form data when closing
   formData.value = {
     name: "",
     description: "",
+    selectedMetrics: [],
   };
   error.value = "";
   emit("close");
@@ -92,12 +131,18 @@ async function submitForm() {
   isSubmitting.value = true;
 
   try {
-    const response = await fetch("http://127.0.0.1:5000/api/graphs", {
+    const requestData = {
+      name: formData.value.name,
+      description: formData.value.description,
+      tracked_metrics: formData.value.selectedMetrics
+    };
+
+    const response = await fetch(getApiUrl("/graphs"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(formData.value),
+      body: JSON.stringify(requestData),
     });
 
     if (!response.ok) {
@@ -123,30 +168,25 @@ async function submitForm() {
 
 <style scoped>
 /* A cleaner modal implementation */
-.new-graph-modal {
+.modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   z-index: 1000;
 }
 
-.modal-overlay {
-  position: fixed;
-  inset: 0; /* shorthand for top, right, bottom, left: 0 */
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(2px);
-}
-
 .modal-wrapper {
-  position: relative; /* Creates a new stacking context */
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
   padding: 20px;
-  z-index: 1001;
 }
 
 .modal-container {
@@ -205,7 +245,14 @@ async function submitForm() {
 .form-group label {
   font-size: 0.9rem;
   font-weight: 500;
-  color: #e2e8f0;
+  color: #e5e7eb;
+  margin-bottom: 0.25rem;
+}
+
+.form-help {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
 }
 
 .form-input {
