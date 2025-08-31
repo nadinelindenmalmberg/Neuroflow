@@ -19,8 +19,7 @@ OPENAI_API_KEY=your-openai-api-key-here
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174
 
 # Oura Ring Configuration (Optional)
-OURA_CLIENT_ID=your-oura-client-id
-OURA_CLIENT_SECRET=your-oura-client-secret
+OURA_API_TOKEN=your-oura-api-token-here
 ```
 
 ## Getting API Keys
@@ -37,6 +36,12 @@ OURA_CLIENT_SECRET=your-oura-client-secret
 3. Go to Settings > Database
 4. Copy the connection string
 5. Replace the placeholder in your `.env` file
+
+### Oura Ring API Token
+1. Go to https://cloud.ouraring.com/personal-access-tokens
+2. Sign in to your Oura account
+3. Create a new personal access token
+4. Copy the token and add it to your `.env` file as `OURA_API_TOKEN`
 
 ## Quick Commands
 
