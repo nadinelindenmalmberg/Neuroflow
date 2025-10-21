@@ -24,12 +24,24 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(250), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
+    
+    # Oura integration fields
     oura_api_token = db.Column(db.String(500))  # Encrypted Oura API token
     last_oura_sync = db.Column(db.DateTime)  # Last sync timestamp
+    
+    # Fitbit integration fields
+    fitbit_access_token = db.Column(db.String(500))  # Fitbit OAuth access token
+    fitbit_refresh_token = db.Column(db.String(500))  # Fitbit OAuth refresh token
+    fitbit_token_expires_at = db.Column(db.DateTime)  # Token expiration time
+    fitbit_user_id = db.Column(db.String(100))  # Fitbit user ID
+    last_fitbit_sync = db.Column(db.DateTime)  # Last Fitbit sync timestamp
+    
+    # General sync settings
     sync_frequency = db.Column(db.String(20), default='manual')  # 'manual', 'daily', 'weekly'
     sync_enabled = db.Column(db.Boolean, default=False)  # Enable/disable automatic sync
     last_automatic_sync = db.Column(db.DateTime)  # Last automatic sync timestamp
     next_scheduled_sync = db.Column(db.DateTime)  # Next scheduled sync timestamp
+    selected_dashboard_metrics = db.Column(db.Text)  # JSON string of selected metrics for dashboard
     sync_logs = db.relationship("SyncLog", backref="user", lazy=True)
 
 class SyncLog(db.Model):

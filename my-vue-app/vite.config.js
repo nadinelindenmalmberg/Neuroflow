@@ -28,4 +28,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate large dependencies
+          'apexcharts': ['apexcharts'],
+          'lucide': ['lucide-vue-next'],
+          'supabase': ['@supabase/supabase-js'],
+          'marked': ['marked']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000,
+    minify: 'esbuild'
+  }
 });
+

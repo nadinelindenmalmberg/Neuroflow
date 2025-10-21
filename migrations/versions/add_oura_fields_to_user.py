@@ -21,10 +21,12 @@ def upgrade():
     op.add_column('user', sa.Column('oura_api_token', sa.String(length=500), nullable=True))
     op.add_column('user', sa.Column('last_oura_sync', sa.DateTime(), nullable=True))
     op.add_column('user', sa.Column('sync_frequency', sa.String(length=20), nullable=True, server_default='manual'))
+    op.add_column('user', sa.Column('selected_dashboard_metrics', sa.Text(), nullable=True))
 
 
 def downgrade():
     # Remove Oura API token fields from User table
+    op.drop_column('user', 'selected_dashboard_metrics')
     op.drop_column('user', 'sync_frequency')
     op.drop_column('user', 'last_oura_sync')
     op.drop_column('user', 'oura_api_token') 

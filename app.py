@@ -1,7 +1,8 @@
+
 import os
 import json
 import openai
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import or_
@@ -9,10 +10,23 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_apscheduler import APScheduler
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Environment variables loaded from .env file")
+except ImportError:
+    print("⚠️ python-dotenv not installed. Install with: pip install python-dotenv")
+except Exception as e:
+    print(f"⚠️ Error loading .env file: {e}")
+
 # Import your models AFTER initializing db
 from models import db, Graph, DataPoint, Experiment, User, SyncLog
 from utils.services.oura_fetch_and_store import fetch_oura_data, flatten_oura_chunks, clean_data, store_oura_data
 from utils.services.oura_sync_manager import OuraSyncManager
+from utils.services.fitbit_oauth import get_fitbit_oauth
+from utils.services.fitbit_fetch_and_store import fetch_fitbit_data, clean_fitbit_data, store_fitbit_data
+from utils.services.fitbit_sync_manager import FitbitSyncManager
 from ai_analysis import openai_connection
 from dotenv import load_dotenv
 
@@ -38,9 +52,20 @@ CORS(app, resources={
 app.secret_key = os.getenv('SECRET_KEY', 'your-unique-secret-key-change-in-production')
 
 database_url = os.getenv("DATABASE_URL")
+# Convert psycopg2 URL to psycopg3 format
+if database_url and database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://")
 print(f"Using DATABASE_URL: {database_url}")
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Fix psycopg3 prepared statement issues
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+    "connect_args": {
+        "autocommit": False
+    }
+}
 
 db.init_app(app)
 migrate = Migrate(app, db)
@@ -54,11 +79,17 @@ scheduler = APScheduler()
 scheduler.init_app(app)
 scheduler.start()
 
-# Initialize Oura sync manager
+# Initialize sync managers
 oura_sync_manager = OuraSyncManager(scheduler)
+fitbit_sync_manager = FitbitSyncManager(scheduler)
 
 # OpenAI API setup
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if openai_api_key and openai_api_key != "your_openai_api_key_here":
+    openai.api_key = openai_api_key
+else:
+    print("Warning: OPENAI_API_KEY not set or invalid. AI features will be disabled.")
+    openai.api_key = None
 
 @app.route('/api/upload/process-notes', methods=['POST'])
 def process_notes():
@@ -69,6 +100,13 @@ def process_notes():
         
         if not notes:
             return jsonify({"error": "No notes provided"}), 400
+        
+        # Check if OpenAI API key is available
+        if not openai.api_key:
+            return jsonify({
+                "error": "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to use AI features.",
+                "code": "OPENAI_KEY_MISSING"
+            }), 503
         
         # Determine if we need to chunk the data
         notes_length = len(notes)
@@ -691,10 +729,13 @@ def sync_oura_now():
             status='in_progress',
             start_date=datetime.strptime(start_date, '%Y-%m-%d').date(),
             end_date=datetime.strptime(end_date, '%Y-%m-%d').date(),
-            started_at=datetime.utcnow()
+            started_at=datetime.now(timezone.utc)
         )
         db.session.add(sync_log)
         db.session.commit()
+        
+        # Get the sync_log ID for potential updates
+        sync_log_id = sync_log.id
         
         try:
             # Fetch and store data
@@ -706,29 +747,51 @@ def sync_oura_now():
             # Count records imported (approximate)
             records_imported = len(cleaned) if cleaned else 0
             
-            # Update sync log with success
-            sync_log.status = 'success'
-            sync_log.records_imported = records_imported
-            sync_log.completed_at = datetime.utcnow()
-            
-            # Update last sync timestamp
-            user.last_oura_sync = datetime.utcnow()
-            db.session.commit()
-            
-            return jsonify({
-                'message': 'Oura data synced successfully',
-                'last_sync': user.last_oura_sync.isoformat(),
-                'records_imported': records_imported,
-                'sync_log_id': sync_log.id
-            })
+            # Start a new transaction for updating the sync log
+            try:
+                # Get fresh sync log instance to avoid transaction issues
+                sync_log = SyncLog.query.get(sync_log_id)
+                if sync_log:
+                    sync_log.status = 'success'
+                    sync_log.records_imported = records_imported
+                    sync_log.completed_at = datetime.now(timezone.utc)
+                    
+                    # Update last sync timestamp
+                    user.last_oura_sync = datetime.now(timezone.utc)
+                    db.session.commit()
+                
+                return jsonify({
+                    'message': 'Oura data synced successfully',
+                    'last_sync': user.last_oura_sync.isoformat(),
+                    'records_imported': records_imported,
+                    'sync_log_id': sync_log_id
+                })
+                
+            except Exception as update_error:
+                db.session.rollback()
+                # Even if we can't update the sync log, return success since data was synced
+                return jsonify({
+                    'message': 'Oura data synced successfully (sync log update failed)',
+                    'records_imported': records_imported,
+                    'sync_log_id': sync_log_id,
+                    'warning': 'Could not update sync log: ' + str(update_error)
+                })
             
         except Exception as sync_error:
-            # Update sync log with failure
-            sync_log.status = 'failed'
-            sync_log.error_message = str(sync_error)
-            sync_log.completed_at = datetime.utcnow()
-            db.session.commit()
-            raise sync_error
+            # Start a new transaction for error logging
+            try:
+                # Get fresh sync log instance
+                sync_log = SyncLog.query.get(sync_log_id)
+                if sync_log:
+                    sync_log.status = 'failed'
+                    sync_log.error_message = str(sync_error)
+                    sync_log.completed_at = datetime.now(timezone.utc)
+                    db.session.commit()
+            except Exception as log_error:
+                db.session.rollback()
+                print(f"Failed to update sync log: {log_error}")
+            
+            return jsonify({'error': str(sync_error)}), 500
             
     except Exception as e:
         db.session.rollback()
@@ -909,6 +972,379 @@ def get_detailed_sync_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ============================================================================
+# FITBIT INTEGRATION ENDPOINTS
+# ============================================================================
+
+@app.route('/api/integrations/fitbit/auth-url', methods=['GET'])
+def get_fitbit_auth_url():
+    """Get Fitbit OAuth authorization URL"""
+    try:
+        # Safe runtime log - never print secrets
+        client_id = os.getenv('FITBIT_CLIENT_ID')
+        redirect_uri = os.getenv('FITBIT_REDIRECT_URI')
+        print(f"🔧 Fitbit Config Check - Client ID: {client_id[:8] if client_id else 'NOT SET'}..., Redirect: {redirect_uri}")
+        
+        oauth = get_fitbit_oauth()
+        auth_url = oauth.get_authorization_url()
+        
+        return jsonify({
+            'auth_url': auth_url,
+            'message': 'Visit this URL to authorize Fitbit access'
+        })
+    except Exception as e:
+        print(f"❌ Fitbit auth URL error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/integrations/fitbit/callback', methods=['POST'])
+def fitbit_oauth_callback():
+    """Handle Fitbit OAuth callback and save tokens"""
+    try:
+        data = request.get_json()
+        authorization_code = data.get('code')
+        
+        print(f"🔍 Fitbit OAuth Callback - Received code: {authorization_code[:10] if authorization_code else 'None'}...")
+        
+        if not authorization_code:
+            print("❌ No authorization code provided")
+            return jsonify({'error': 'Authorization code is required'}), 400
+        
+        # Exchange code for tokens
+        oauth = get_fitbit_oauth()
+        print("🔄 Exchanging code for tokens...")
+        token_result = oauth.exchange_code_for_tokens(authorization_code)
+        
+        print(f"🔍 Token exchange result: {token_result}")
+        
+        if not token_result['success']:
+            print(f"❌ Token exchange failed: {token_result['error']}")
+            return jsonify({'error': token_result['error']}), 400
+        
+        # Save tokens to user (for now, use default user)
+        user = User.query.first()
+        if not user:
+            print("❌ No user found in database")
+            return jsonify({'error': 'No user found'}), 404
+        
+        print(f"✅ Found user: {user.id}")
+        
+        # Calculate token expiration
+        expires_at = datetime.utcnow() + timedelta(seconds=token_result['expires_in'])
+        
+        # Save Fitbit tokens
+        user.fitbit_access_token = token_result['access_token']
+        user.fitbit_refresh_token = token_result['refresh_token']
+        user.fitbit_token_expires_at = expires_at
+        user.fitbit_user_id = token_result.get('user_id')
+        
+        print(f"💾 Saving tokens - Access token: {token_result['access_token'][:20]}...")
+        print(f"💾 User ID: {token_result.get('user_id')}")
+        print(f"💾 Expires at: {expires_at}")
+        
+        db.session.commit()
+        print("✅ Tokens saved successfully!")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fitbit connected successfully',
+            'user_id': token_result.get('user_id')
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in Fitbit OAuth callback: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/integrations/fitbit/status', methods=['GET'])
+def get_fitbit_status():
+    """Get Fitbit connection status"""
+    try:
+        user = User.query.first()
+        if not user:
+            return jsonify({
+                'connected': False,
+                'has_token': False,
+                'last_sync': None
+            })
+        
+        return jsonify({
+            'connected': bool(user.fitbit_access_token),
+            'has_token': bool(user.fitbit_access_token),
+            'last_sync': user.last_fitbit_sync.isoformat() if user.last_fitbit_sync else None,
+            'user_id': user.fitbit_user_id,
+            'token_expires_at': user.fitbit_token_expires_at.isoformat() if user.fitbit_token_expires_at else None
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/integrations/fitbit/sync-now', methods=['POST'])
+def sync_fitbit_now():
+    """Manually trigger Fitbit sync"""
+    try:
+        user = User.query.first()
+        print(f"🔍 Sync request - User found: {bool(user)}")
+        
+        if not user:
+            print("❌ No user found")
+            return jsonify({'error': 'No user found'}), 404
+            
+        if not user.fitbit_access_token:
+            print("❌ No Fitbit access token found")
+            print(f"🔍 User has access token: {bool(user.fitbit_access_token)}")
+            print(f"🔍 User has refresh token: {bool(user.fitbit_refresh_token)}")
+            print(f"🔍 User Fitbit ID: {user.fitbit_user_id}")
+            return jsonify({'error': 'No Fitbit access token found'}), 400
+        
+        print(f"✅ Starting sync for user {user.id}")
+        print(f"🔍 Access token (first 20 chars): {user.fitbit_access_token[:20]}...")
+        
+        # Run sync
+        result = fitbit_sync_manager.run_user_sync(user.id)
+        
+        print(f"🔍 Sync result: {result}")
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Fitbit sync completed successfully',
+                'records_imported': result['records_imported'],
+                'start_date': result['start_date'],
+                'end_date': result['end_date']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result['error']
+            }), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/fitbit/sync-steps', methods=['POST'])
+def sync_fitbit_steps_only():
+    """Minimal endpoint to fetch and store today's steps only"""
+    try:
+        user = User.query.first()
+        if not user or not user.fitbit_access_token:
+            return jsonify({
+                'status': 'error',
+                'message': 'No Fitbit access token found'
+            }), 401
+        
+        print("🚶 Fetching today's steps from Fitbit...")
+        
+        # Get today's date
+        today = datetime.now().date()
+        today_str = today.strftime('%Y-%m-%d')
+        
+        # Create Fitbit API client
+        from utils.services.fitbit_fetch_and_store import FitbitAPI
+        fitbit = FitbitAPI(user.fitbit_access_token)
+        
+        # Fetch today's activity data
+        activity_data = fitbit.fetch_activity_data(today_str, today_str)
+        
+        if not activity_data or 'summary' not in activity_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No activity data found for today'
+            }), 404
+        
+        # Extract steps from summary
+        steps = activity_data['summary'].get('steps', 0)
+        print(f"📊 Today's steps: {steps}")
+        
+        # Store in database
+        from models import Graph, DataPoint
+        
+        # Get or create Fitbit graph
+        fitbit_graph = Graph.query.filter_by(name="Fitbit Data").first()
+        if not fitbit_graph:
+            fitbit_graph = Graph(
+                name="Fitbit Data", 
+                description="Data from Fitbit Web API",
+                is_temporary=False
+            )
+            db.session.add(fitbit_graph)
+            db.session.commit()
+        
+        # Check if data point already exists
+        existing_dp = DataPoint.query.filter_by(
+            date=today,
+            metric_name='fitbit_steps',
+            graph_id=fitbit_graph.id
+        ).first()
+        
+        if existing_dp:
+            # Update existing
+            existing_dp.value = float(steps)
+            print(f"🔄 Updated existing steps record: {steps}")
+        else:
+            # Create new
+            new_dp = DataPoint(
+                date=today,
+                metric_name='fitbit_steps',
+                value=float(steps),
+                graph_id=fitbit_graph.id
+            )
+            db.session.add(new_dp)
+            print(f"➕ Created new steps record: {steps}")
+        
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'steps': steps,
+            'date': today_str,
+            'message': f'Successfully stored {steps} steps for today'
+        })
+        
+    except Exception as e:
+        print(f"❌ Steps sync error: {e}")
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/integrations/fitbit/test-connection', methods=['POST'])
+def test_fitbit_connection():
+    """Test Fitbit API connection"""
+    try:
+        user = User.query.first()
+        if not user:
+            return jsonify({'error': 'No user found'}), 404
+        
+        result = fitbit_sync_manager.test_connection(user.id)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/fitbit/test', methods=['GET'])
+def fitbit_test_simple():
+    """Simple GET endpoint to test Fitbit connection and return profile info"""
+    try:
+        user = User.query.first()
+        if not user or not user.fitbit_access_token:
+            return jsonify({
+                'status': 'error',
+                'message': 'No Fitbit access token found'
+            }), 401
+        
+        # Test connection with profile endpoint
+        from utils.services.fitbit_fetch_and_store import FitbitAPI
+        fitbit = FitbitAPI(user.fitbit_access_token)
+        is_valid, message = fitbit.test_connection()
+        
+        if is_valid:
+            return jsonify({
+                'status': 'success',
+                'displayName': message,
+                'message': 'Fitbit connection successful'
+            })
+        else:
+            # Try to refresh token if expired
+            if 'expired' in message.lower() or 'invalid' in message.lower():
+                print("🔄 Token expired, attempting refresh...")
+                oauth = get_fitbit_oauth()
+                refresh_result = oauth.refresh_access_token(user.fitbit_refresh_token)
+                
+                if refresh_result['success']:
+                    # Update tokens
+                    user.fitbit_access_token = refresh_result['access_token']
+                    user.fitbit_refresh_token = refresh_result['refresh_token']
+                    user.fitbit_token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result['expires_in'])
+                    db.session.commit()
+                    
+                    # Retry with new token
+                    fitbit = FitbitAPI(user.fitbit_access_token)
+                    is_valid, message = fitbit.test_connection()
+                    
+                    if is_valid:
+                        return jsonify({
+                            'status': 'success',
+                            'displayName': message,
+                            'message': 'Fitbit connection successful after token refresh'
+                        })
+            
+            return jsonify({
+                'status': 'error',
+                'message': message
+            }), 401
+            
+    except Exception as e:
+        print(f"❌ Fitbit test error: {e}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/integrations/fitbit/disconnect', methods=['POST'])
+def disconnect_fitbit():
+    """Disconnect Fitbit integration"""
+    try:
+        user = User.query.first()
+        if not user:
+            return jsonify({'error': 'No user found'}), 404
+        
+        # Revoke token if we have one
+        if user.fitbit_access_token:
+            oauth = get_fitbit_oauth()
+            oauth.revoke_token(user.fitbit_access_token)
+        
+        # Clear Fitbit data
+        user.fitbit_access_token = None
+        user.fitbit_refresh_token = None
+        user.fitbit_token_expires_at = None
+        user.fitbit_user_id = None
+        user.last_fitbit_sync = None
+        
+        # Unschedule any automatic sync
+        fitbit_sync_manager.unschedule_user_sync(user.id)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Fitbit disconnected successfully'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/integrations/fitbit/debug', methods=['GET'])
+def debug_fitbit():
+    """Debug endpoint to check Fitbit integration status"""
+    try:
+        user = User.query.first()
+        if not user:
+            return jsonify({'error': 'No user found'}), 404
+        
+        # Check database for Fitbit data
+        fitbit_data_count = DataPoint.query.filter(DataPoint.metric_name.like('fitbit_%')).count()
+        fitbit_metrics = db.session.query(DataPoint.metric_name).filter(
+            DataPoint.metric_name.like('fitbit_%')
+        ).distinct().all()
+        
+        return jsonify({
+            'user_id': user.id,
+            'has_access_token': bool(user.fitbit_access_token),
+            'has_refresh_token': bool(user.fitbit_refresh_token),
+            'fitbit_user_id': user.fitbit_user_id,
+            'last_sync': user.last_fitbit_sync.isoformat() if user.last_fitbit_sync else None,
+            'token_expires_at': user.fitbit_token_expires_at.isoformat() if user.fitbit_token_expires_at else None,
+            'data_points_count': fitbit_data_count,
+            'available_metrics': [metric[0] for metric in fitbit_metrics],
+            'access_token_preview': user.fitbit_access_token[:20] + '...' if user.fitbit_access_token else None
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/graphs/<int:graph_id>', methods=['GET'])
 def get_graph_details(graph_id):
     try:
@@ -994,6 +1430,53 @@ def convert_all_graphs_to_dynamic():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Helper function for calculating experiment stats
+def calculate_experiment_stats(experiment):
+    """Calculate stats for an experiment object (not from API request)"""
+    try:
+        # Get the metric of interest
+        metric_name = experiment.metric_of_interest
+        if not metric_name:
+            return {
+                'benchmark_value': None,
+                'current_value': None,
+                'improvement_percentage': None,
+                'data_points_count': 0,
+                'error': 'No metric specified'
+            }
+        
+        # Calculate benchmark based on benchmark type
+        benchmark_stats = calculate_benchmark(experiment)
+        
+        # Calculate current/post-experiment value if experiment has ended
+        current_stats = calculate_current_value(experiment)
+        
+        # Calculate improvement percentage
+        improvement_percentage = None
+        if benchmark_stats['value'] is not None and current_stats['value'] is not None:
+            if benchmark_stats['value'] != 0:
+                improvement_percentage = ((current_stats['value'] - benchmark_stats['value']) / benchmark_stats['value']) * 100
+            else:
+                improvement_percentage = None
+        
+        return {
+            'benchmark_value': benchmark_stats['value'],
+            'current_value': current_stats['value'],
+            'improvement_percentage': improvement_percentage,
+            'data_points_count': benchmark_stats['count'],
+            'benchmark_period': benchmark_stats['period'],
+            'current_period': current_stats['period']
+        }
+        
+    except Exception as e:
+        return {
+            'benchmark_value': None,
+            'current_value': None,
+            'improvement_percentage': None,
+            'data_points_count': 0,
+            'error': str(e)
+        }
+
 # Experiment API endpoints
 @app.route('/api/experiments', methods=['GET'])
 def get_experiments():
@@ -1019,6 +1502,39 @@ def get_experiments():
             })
         
         return jsonify(experiments_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/experiments/with-stats', methods=['GET'])
+def get_experiments_with_stats():
+    """Get all experiments with their stats in a single request to avoid N+1 queries"""
+    try:
+        experiments = Experiment.query.order_by(Experiment.created_at.desc()).all()
+        experiments_data = []
+        
+        for exp in experiments:
+            # Calculate stats for each experiment
+            stats = calculate_experiment_stats(exp)
+            
+            experiments_data.append({
+                'id': exp.id,
+                'title': exp.title,
+                'description': exp.description,
+                'period': exp.period,
+                'start_date': exp.start_date.isoformat() if exp.start_date else None,
+                'end_date': exp.end_date.isoformat() if exp.end_date else None,
+                'driver': exp.driver,
+                'metric_of_interest': exp.metric_of_interest,
+                'benchmark': exp.benchmark,
+                'icon': exp.icon,
+                'icon_color': exp.icon_color,
+                'created_at': exp.created_at.isoformat(),
+                'updated_at': exp.updated_at.isoformat(),
+                'stats': stats
+            })
+        
+        return jsonify(experiments_data)
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1579,6 +2095,321 @@ def create_plot_for_graph(graph_obj):
         })
 
     return final_series
+
+@app.route('/api/integrations/status', methods=['GET'])
+def get_integrations_status():
+    """Get status of all integrations"""
+    try:
+        # For now, return a default user (in production, get from session/auth)
+        user = User.query.first()
+        if not user:
+            return jsonify({'integrations': []})
+
+        integrations = []
+        
+        # Oura integration status - dynamically get available metrics from database
+        oura_available_metrics = []
+        if user.oura_api_token:
+            # Get all unique metric names that have data points
+            oura_metrics = db.session.query(DataPoint.metric_name).distinct().all()
+            oura_available_metrics = [metric[0] for metric in oura_metrics]
+        
+        oura_status = {
+            'name': 'Oura Ring',
+            'connected': bool(user.oura_api_token),
+            'last_sync': user.last_oura_sync.isoformat() if user.last_oura_sync else None,
+            'sync_frequency': user.sync_frequency or 'manual',
+            'data_points': DataPoint.query.filter(
+                DataPoint.metric_name.in_(['average_heart_rate', 'average_hrv', 'average_breath', 
+                                         'total_sleep_duration', 'deep_sleep_duration', 'rem_sleep_duration', 'awake_time'])
+            ).count() if user.oura_api_token else 0,
+            'available_metrics': oura_available_metrics
+        }
+        integrations.append(oura_status)
+        
+        # Fitbit integration status
+        fitbit_available_metrics = []
+        if user.fitbit_access_token:
+            # Get Fitbit-specific metrics from database
+            fitbit_metrics = db.session.query(DataPoint.metric_name).filter(
+                DataPoint.metric_name.like('fitbit_%')
+            ).distinct().all()
+            fitbit_available_metrics = [metric[0] for metric in fitbit_metrics]
+        
+        fitbit_status = {
+            'name': 'Fitbit',
+            'connected': bool(user.fitbit_access_token),
+            'last_sync': user.last_fitbit_sync.isoformat() if user.last_fitbit_sync else None,
+            'sync_frequency': 'manual',
+            'data_points': DataPoint.query.filter(DataPoint.metric_name.like('fitbit_%')).count() if user.fitbit_access_token else 0,
+            'available_metrics': fitbit_available_metrics
+        }
+        integrations.append(fitbit_status)
+        
+        # Garmin integration (not implemented yet)
+        garmin_status = {
+            'name': 'Garmin Connect',
+            'connected': False,
+            'last_sync': None,
+            'sync_frequency': 'manual',
+            'data_points': 0,
+            'available_metrics': ['steps', 'heart_rate', 'sleep', 'vo2_max', 'stress']
+        }
+        integrations.append(garmin_status)
+        
+        # WHOOP integration (not implemented yet)
+        whoop_status = {
+            'name': 'WHOOP',
+            'connected': False,
+            'last_sync': None,
+            'sync_frequency': 'manual',
+            'data_points': 0,
+            'available_metrics': ['recovery', 'strain', 'sleep', 'hrv', 'respiratory_rate']
+        }
+        integrations.append(whoop_status)
+
+        return jsonify({'integrations': integrations})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/metrics/available', methods=['GET'])
+def get_available_dashboard_metrics():
+    """Get all available metrics that can be displayed on dashboard"""
+    try:
+        # Define available metrics from different sources
+        available_metrics = {
+            'oura': [
+                {'id': 'average_hrv', 'name': 'Heart Rate Variability', 'description': 'HRV measurements for recovery', 'category': 'vital'},
+                {'id': 'average_heart_rate', 'name': 'Average Heart Rate', 'description': 'Average heart rate during sleep', 'category': 'vital'},
+                {'id': 'average_breath', 'name': 'Breathing Rate', 'description': 'Average breathing rate', 'category': 'vital'},
+                {'id': 'deep_sleep_duration', 'name': 'Deep Sleep', 'description': 'Deep sleep duration', 'category': 'mental'},
+                {'id': 'rem_sleep_duration', 'name': 'REM Sleep', 'description': 'REM sleep duration', 'category': 'mental'},
+                {'id': 'awake_time', 'name': 'Awake Time', 'description': 'Time spent awake during sleep', 'category': 'mental'},
+                {'id': 'total_sleep_duration', 'name': 'Total Sleep', 'description': 'Total sleep duration', 'category': 'mental'}
+            ],
+            'garmin': [
+                {'id': 'steps', 'name': 'Steps', 'description': 'Daily step count', 'category': 'fitness'},
+                {'id': 'heart_rate', 'name': 'Heart Rate', 'description': 'Average heart rate', 'category': 'vital'},
+                {'id': 'sleep', 'name': 'Sleep', 'description': 'Sleep duration and quality', 'category': 'mental'},
+                {'id': 'vo2_max', 'name': 'VO2 Max', 'description': 'Cardiovascular fitness level', 'category': 'fitness'},
+                {'id': 'stress', 'name': 'Stress', 'description': 'Stress level monitoring', 'category': 'mental'}
+            ],
+            'whoop': [
+                {'id': 'recovery', 'name': 'Recovery', 'description': 'Daily recovery score', 'category': 'mental'},
+                {'id': 'strain', 'name': 'Strain', 'description': 'Daily strain score', 'category': 'fitness'},
+                {'id': 'sleep', 'name': 'Sleep', 'description': 'Sleep performance metrics', 'category': 'mental'},
+                {'id': 'hrv', 'name': 'HRV', 'description': 'Heart rate variability', 'category': 'vital'},
+                {'id': 'respiratory_rate', 'name': 'Respiratory Rate', 'description': 'Breathing rate monitoring', 'category': 'vital'}
+            ]
+        }
+        
+        return jsonify(available_metrics)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/metrics/selected', methods=['GET'])
+def get_selected_dashboard_metrics():
+    """Get user's selected dashboard metrics"""
+    try:
+        # For now, return a default user (in production, get from session/auth)
+        user = User.query.first()
+        if not user:
+            return jsonify({'selected_metrics': {}})
+
+        selected_metrics = {}
+        if user.selected_dashboard_metrics:
+            import json
+            selected_metrics = json.loads(user.selected_dashboard_metrics)
+
+        return jsonify({'selected_metrics': selected_metrics})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/metrics/selected', methods=['POST'])
+def save_selected_dashboard_metrics():
+    """Save user's selected dashboard metrics"""
+    try:
+        data = request.get_json()
+        device_name = data.get('device_name')
+        selected_metrics = data.get('selected_metrics', [])
+
+        # For now, return a default user (in production, get from session/auth)
+        user = User.query.first()
+        if not user:
+            return jsonify({'error': 'No user found'}), 404
+
+        # Get current selected metrics
+        current_metrics = {}
+        if user.selected_dashboard_metrics:
+            import json
+            current_metrics = json.loads(user.selected_dashboard_metrics)
+
+        # Update the specific device's selected metrics
+        current_metrics[device_name.lower()] = selected_metrics
+
+        # Save back to database
+        import json
+        user.selected_dashboard_metrics = json.dumps(current_metrics)
+        db.session.commit()
+
+        return jsonify({'message': 'Metrics saved successfully', 'selected_metrics': current_metrics})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/metrics/recent', methods=['GET'])
+def get_recent_metrics():
+    """
+    Get the 5 most recent metric entries ordered by timestamp desc
+    
+    This endpoint fetches the latest 5 data points from the DataPoint table
+    and formats them for display in the dashboard's "Recent Metrics" section.
+    
+    Returns:
+        - recent_metrics: Array of formatted metric objects
+        - count: Number of metrics returned
+    """
+    try:
+        # Get the 5 most recent data points from the database
+        # Order by date descending to get the newest entries first
+        recent_data_points = db.session.query(DataPoint)\
+            .order_by(DataPoint.date.desc())\
+            .limit(5)\
+            .all()
+        
+        # Transform the data points into the format expected by the frontend
+        recent_metrics = []
+        for data_point in recent_data_points:
+            # Format the metric name for display (convert snake_case to Title Case)
+            formatted_name = data_point.metric_name.replace('_', ' ').title()
+            
+            # Handle special cases for abbreviations
+            if 'hrv' in data_point.metric_name.lower():
+                formatted_name = formatted_name.replace('Hrv', 'HRV')
+            if 'vo2' in data_point.metric_name.lower():
+                formatted_name = formatted_name.replace('Vo2', 'VO2')
+            if 'rem' in data_point.metric_name.lower():
+                formatted_name = formatted_name.replace('Rem', 'REM')
+            
+            # Get the unit for this metric
+            unit = get_metric_unit(data_point.metric_name)
+            
+            # Calculate time since last sync (use sync time, not data date)
+            # Get the most recent sync time for this metric
+            latest_sync = db.session.query(SyncLog).filter(
+                SyncLog.status == 'success',
+                SyncLog.end_date >= data_point.date
+            ).order_by(SyncLog.completed_at.desc()).first()
+            
+            if latest_sync and latest_sync.completed_at:
+                time_diff = datetime.now() - latest_sync.completed_at
+                if time_diff.days > 0:
+                    last_updated = f"{time_diff.days} day{'s' if time_diff.days > 1 else ''} ago"
+                elif time_diff.seconds > 3600:
+                    hours = time_diff.seconds // 3600
+                    last_updated = f"{hours} hour{'s' if hours > 1 else ''} ago"
+                elif time_diff.seconds > 60:
+                    minutes = time_diff.seconds // 60
+                    last_updated = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+                else:
+                    last_updated = "Just now"
+            else:
+                # Fallback to data date if no sync log found
+                time_diff = datetime.now() - datetime.combine(data_point.date, datetime.min.time())
+                if time_diff.days > 0:
+                    last_updated = f"{time_diff.days} day{'s' if time_diff.days > 1 else ''} ago"
+                elif time_diff.seconds > 3600:
+                    hours = time_diff.seconds // 3600
+                    last_updated = f"{hours} hour{'s' if hours > 1 else ''} ago"
+                elif time_diff.seconds > 60:
+                    minutes = time_diff.seconds // 60
+                    last_updated = f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+                else:
+                    last_updated = "Just now"
+            
+            # Determine category based on metric name
+            category = "vital"  # default
+            if any(keyword in data_point.metric_name.lower() for keyword in ['sleep', 'rem', 'deep', 'awake']):
+                category = "mental"
+            elif any(keyword in data_point.metric_name.lower() for keyword in ['steps', 'activity', 'calorie']):
+                category = "fitness"
+            
+            recent_metrics.append({
+                'id': data_point.id,
+                'title': formatted_name,
+                'value': data_point.value,
+                'unit': unit,
+                'trend': 'stable',  # We could calculate this by comparing with previous values
+                'lastUpdated': last_updated,
+                'category': category,
+                'metric_name': data_point.metric_name,  # Keep original name for reference
+                'date': data_point.date.isoformat()
+            })
+        
+        return jsonify({
+            'recent_metrics': recent_metrics,
+            'count': len(recent_metrics)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/dashboard/metrics/values', methods=['GET'])
+def get_dashboard_metric_values():
+    """Get current values for selected dashboard metrics"""
+    try:
+        print("🔍 DEBUG: Dashboard metrics/values endpoint called")
+        # Get user's selected metrics
+        user = User.query.first()
+        if not user or not user.selected_dashboard_metrics:
+            print("🔍 DEBUG: No user or no selected metrics")
+            return jsonify({'metric_values': {}})
+        
+        selected_metrics = json.loads(user.selected_dashboard_metrics)
+        print(f"🔍 DEBUG: Selected metrics: {selected_metrics}")
+        metric_values = {}
+        
+        # Get latest values for each selected metric
+        for device_name, metrics in selected_metrics.items():
+            device_values = {}
+            for metric in metrics:
+                # Handle both string metrics and object metrics
+                if isinstance(metric, dict):
+                    metric_id = metric['id']
+                else:
+                    metric_id = metric
+                
+                # Get the most recent data point for this metric
+                latest_dp = DataPoint.query.filter_by(metric_name=metric_id).order_by(DataPoint.date.desc()).first()
+                if latest_dp:
+                    device_values[metric_id] = {
+                        'value': latest_dp.value,
+                        'date': latest_dp.date.isoformat(),
+                        'unit': get_metric_unit(metric_id)
+                    }
+                else:
+                    device_values[metric_id] = {
+                        'value': None,
+                        'date': None,
+                        'unit': get_metric_unit(metric_id)
+                    }
+            metric_values[device_name] = device_values
+        
+        return jsonify({'metric_values': metric_values})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def get_metric_unit(metric_name):
+    """Get the appropriate unit for a metric"""
+    units = {
+        'average_hrv': 'ms',
+        'average_heart_rate': 'bpm',
+        'average_breath': 'rpm',
+        'deep_sleep_duration': 'min',
+        'rem_sleep_duration': 'min',
+        'awake_time': 'min',
+        'total_sleep_duration': 'min'
+    }
+    return units.get(metric_name, '')
 
 if __name__ == '__main__':
     port = int(os.getenv('FLASK_PORT', 5174))

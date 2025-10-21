@@ -235,26 +235,31 @@ function confirmSelection() {
 
 <style scoped>
 .icon-picker-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 9999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
 }
 
 .icon-picker-modal {
-  background: #1f1f2e;
-  border-radius: 8px;
-  width: 420px;
-  max-width: 90vw;
-  max-height: 70vh;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1f1f2e !important;
+  border-radius: 12px !important;
+  width: 420px !important;
+  max-width: 90vw !important;
+  max-height: 70vh !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  position: relative !important;
+  z-index: 10000 !important;
 }
 
 .icon-picker-header {
