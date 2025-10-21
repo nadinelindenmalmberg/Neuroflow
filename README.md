@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 Create a `.env` file in the root directory:
 ```bash
-DATABASE_URL=postgresql://***REMOVED***:***REMOVED***@***REMOVED***:6543/postgres
+DATABASE_URL=postgresql://username:password@your-database-host:port/database_name
 FLASK_PORT=5174
 OPENAI_API_KEY=your_openai_api_key_here
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
@@ -48,7 +48,7 @@ ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174
 3. Run the Flask API server:
 
 ```bash
-DATABASE_URL="postgresql://***REMOVED***:***REMOVED***@***REMOVED***:6543/postgres" FLASK_PORT=5174 python3 app.py
+DATABASE_URL="your-database-url-here" FLASK_PORT=5174 python3 app.py
 ```
 
 The API will be available at `http://localhost:5174`

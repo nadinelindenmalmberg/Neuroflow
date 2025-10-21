@@ -27,7 +27,7 @@
         <div class="fix-instructions">
           <h4>How to Fix:</h4>
           <ol>
-            <li>Go to your <a href="https://***REMOVED***m/dashboard" target="_blank">Supabase Dashboard</a></li>
+            <li>Go to your <a href="https://supabase.com/dashboard" target="_blank">Supabase Dashboard</a></li>
             <li>Select your project</li>
             <li>Go to Settings → API</li>
             <li>Copy your Project URL and anon key</li>

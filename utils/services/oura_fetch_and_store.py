@@ -131,7 +131,7 @@ def store_oura_data (cleaned_records): #list of dictionaries
 
 # (Optional) A quick test call:
 if __name__ == '__main__':
-    token = '***REMOVED***'
+    token = 'your-oura-api-token-here'
     data = fetch_oura_data(token, '2025-01-01', '2025-02-10')
     flattened = flatten_oura_chunks(data)
     cleaned=clean_data(flattened)
