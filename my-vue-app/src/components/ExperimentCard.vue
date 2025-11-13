@@ -175,7 +175,8 @@ const progressPercentage = computed(() => {
   const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24))
   const elapsedDays = Math.ceil((today - start) / (1000 * 60 * 60 * 24))
   
-  return Math.min(Math.max((elapsedDays / totalDays) * 100, 0), 100)
+  const percentage = Math.min(Math.max((elapsedDays / totalDays) * 100, 0), 100)
+  return percentage.toFixed(2)
 })
 
 // Helper functions

@@ -194,10 +194,38 @@ const filterStatus = ref('all'); // 'all', 'ongoing', 'completed', 'not-started'
 
 // Computed properties
 const filteredExperiments = computed(() => {
-  if (filterStatus.value === 'all') return experiments.value;
   if (filterStatus.value === 'ongoing') return ongoingExperiments.value;
   if (filterStatus.value === 'completed') return completedExperiments.value;
   if (filterStatus.value === 'not-started') return notStartedExperiments.value;
+  
+  // When showing all experiments, sort by status (ongoing first) and then by start date
+  if (filterStatus.value === 'all') {
+    const today = new Date().toISOString().split('T')[0];
+    
+    return [...experiments.value].sort((a, b) => {
+      // Helper function to determine experiment status
+      const getStatus = (exp) => {
+        if (!exp.start_date || !exp.end_date) return 'not-started';
+        if (today >= exp.start_date && today <= exp.end_date) return 'ongoing';
+        if (today > exp.end_date) return 'completed';
+        return 'not-started';
+      };
+      
+      const statusA = getStatus(a);
+      const statusB = getStatus(b);
+      
+      // Priority order: ongoing > not-started > completed
+      const statusOrder = { 'ongoing': 0, 'not-started': 1, 'completed': 2 };
+      
+      if (statusOrder[statusA] !== statusOrder[statusB]) {
+        return statusOrder[statusA] - statusOrder[statusB];
+      }
+      
+      // Within same status, sort by start_date descending (latest first)
+      return new Date(b.start_date || 0) - new Date(a.start_date || 0);
+    });
+  }
+  
   return experiments.value;
 });
 

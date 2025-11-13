@@ -264,7 +264,7 @@ async function toggleMetric(metric) {
       if (data.data) {
         selectedMetrics.value.push(metric);
         currentSeries.value.push({
-          name: metric,
+          name: formatMetricName(metric),
           data: data.data
         });
       }
@@ -317,6 +317,30 @@ async function cancelExploration() {
   } catch (error) {
     console.error("Error canceling exploration:", error);
   }
+}
+
+// Format metric names by removing underscores and capitalizing
+function formatMetricName(metricName) {
+  const metricNames = {
+    'average_heart_rate': 'Average Heart Rate',
+    'average_hrv': 'Average HRV',
+    'awake_time': 'Awake Time',
+    'average_breath': 'Average Breath',
+    'total_sleep_duration': 'Total Sleep',
+    'deep_sleep_duration': 'Deep Sleep',
+    'rem_sleep_duration': 'REM Sleep',
+    'steps': 'Steps',
+    'heart_rate': 'Heart Rate',
+    'sleep': 'Sleep',
+    'vo2_max': 'VO2 Max',
+    'stress': 'Stress',
+    'recovery': 'Recovery',
+    'strain': 'Strain',
+    'hrv': 'HRV',
+    'respiratory_rate': 'Respiratory Rate'
+  }
+  
+  return metricNames[metricName] || metricName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
 
 // Lifecycle hooks

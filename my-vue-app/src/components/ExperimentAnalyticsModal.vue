@@ -220,8 +220,8 @@ const statusLabel = computed(() => {
 });
 
 const progressPercentage = computed(() => {
-  if (experimentStatus.value === 'not-started') return 0;
-  if (experimentStatus.value === 'completed') return 100;
+  if (experimentStatus.value === 'not-started') return '0.00';
+  if (experimentStatus.value === 'completed') return '100.00';
   
   const now = new Date();
   const start = new Date(props.experiment.start_date);
@@ -230,7 +230,8 @@ const progressPercentage = computed(() => {
   const total = end.getTime() - start.getTime();
   const elapsed = now.getTime() - start.getTime();
   
-  return Math.min(Math.max((elapsed / total) * 100, 0), 100);
+  const percentage = Math.min(Math.max((elapsed / total) * 100, 0), 100);
+  return percentage.toFixed(2);
 });
 
 // Methods

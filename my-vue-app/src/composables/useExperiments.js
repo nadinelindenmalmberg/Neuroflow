@@ -14,11 +14,16 @@ const error = ref(null)
 export function useExperiments() {
   // Computed properties
   const ongoingExperiments = computed(() => {
-    return experiments.value.filter(exp => {
-      if (!exp.start_date || !exp.end_date) return false
-      const today = new Date().toISOString().split('T')[0]
-      return today >= exp.start_date && today <= exp.end_date
-    })
+    const today = new Date().toISOString().split('T')[0]
+    return experiments.value
+      .filter(exp => {
+        if (!exp.start_date || !exp.end_date) return false
+        return today >= exp.start_date && today <= exp.end_date
+      })
+      .sort((a, b) => {
+        // Sort by start_date descending (latest first)
+        return new Date(b.start_date) - new Date(a.start_date)
+      })
   })
 
   const completedExperiments = computed(() => {
