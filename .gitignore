@@ -101,4 +101,10 @@ jspm_packages/
 .yarn-integrity
 
 # dotenv environment variables file
-.env 
+.env
+
+# Development/Analysis files (optional - keep local but don't commit)
+# PERFORMANCE_ANALYSIS.md
+# database_optimization.sql
+# create_experiments_table.sql
+# supabase_schema.sql

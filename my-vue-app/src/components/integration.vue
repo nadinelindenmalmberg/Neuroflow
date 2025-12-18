@@ -108,6 +108,7 @@ import { ref, onMounted } from 'vue'
 import { Watch, Zap, Shield, Apple, Activity, Heart, CheckCircle, AlertCircle, Info, X } from 'lucide-vue-next'
 import DeviceIntegrationCard from './DeviceIntegrationCard.vue'
 import MetricSelectionModal from './MetricSelectionModal.vue'
+import { getApiUrl } from '../config'
 
 // Device integrations data - will be populated from API
 const deviceIntegrations = ref([])
@@ -142,7 +143,7 @@ function removeToast(id) {
 // Load integrations data from API
 async function loadIntegrations() {
   try {
-    const response = await fetch('http://localhost:5174/api/integrations/status')
+    const response = await fetch(getApiUrl('/integrations/status'))
     const data = await response.json()
     
     if (data.integrations) {
@@ -166,7 +167,7 @@ async function loadIntegrations() {
 // Load available metrics from API
 async function loadAvailableMetrics() {
   try {
-    const response = await fetch('http://localhost:5174/api/dashboard/metrics/available')
+    const response = await fetch(getApiUrl('/dashboard/metrics/available'))
     const data = await response.json()
     availableMetrics.value = data
   } catch (error) {
@@ -177,7 +178,7 @@ async function loadAvailableMetrics() {
 // Load selected metrics from API
 async function loadSelectedMetrics() {
   try {
-    const response = await fetch('http://localhost:5174/api/dashboard/metrics/selected')
+    const response = await fetch(getApiUrl('/dashboard/metrics/selected'))
     const data = await response.json()
     selectedMetrics.value = data.selected_metrics || {}
   } catch (error) {
@@ -250,7 +251,7 @@ async function handleDeviceConnect(device) {
   if (device.name === 'Fitbit') {
     try {
       // Get Fitbit OAuth URL
-      const response = await fetch('http://localhost:5174/api/integrations/fitbit/auth-url')
+      const response = await fetch(getApiUrl('/integrations/fitbit/auth-url'))
       const data = await response.json()
       
       if (response.ok && data.auth_url) {
@@ -284,7 +285,7 @@ async function handleDeviceDisconnect(device) {
   
   if (device.name === 'Fitbit') {
     try {
-      const response = await fetch('http://localhost:5174/api/integrations/fitbit/disconnect', {
+      const response = await fetch(getApiUrl('/integrations/fitbit/disconnect'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -337,7 +338,7 @@ async function handleSyncNow(device) {
       
       dateRange = `${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`
       
-      response = await fetch('http://localhost:5174/api/integrations/oura/sync-now', {
+      response = await fetch(getApiUrl('/integrations/oura/sync-now'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -348,7 +349,7 @@ async function handleSyncNow(device) {
         })
       })
     } else if (device.name === 'Fitbit') {
-      response = await fetch('http://localhost:5174/api/integrations/fitbit/sync-now', {
+      response = await fetch(getApiUrl('/integrations/fitbit/sync-now'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -408,7 +409,7 @@ function closeMetricSelection() {
 async function saveMetricSelection(selectedMetricsList) {
   if (selectedDevice.value) {
     try {
-      const response = await fetch('http://localhost:5174/api/dashboard/metrics/selected', {
+      const response = await fetch(getApiUrl('/dashboard/metrics/selected'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

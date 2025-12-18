@@ -1255,7 +1255,7 @@ async function handleSyncNow(device) {
       
       dateRange = `${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`
       
-      response = await fetch('http://localhost:5174/api/integrations/oura/sync-now', {
+      response = await fetch(getApiUrl('/integrations/oura/sync-now'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1266,7 +1266,7 @@ async function handleSyncNow(device) {
         })
       })
     } else if (device.name === 'Fitbit') {
-      response = await fetch('http://localhost:5174/api/integrations/fitbit/sync-now', {
+      response = await fetch(getApiUrl('/integrations/fitbit/sync-now'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

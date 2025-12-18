@@ -75,6 +75,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { X } from 'lucide-vue-next';
+import { getApiUrl } from '../config';
 
 const props = defineProps({
   isVisible: {
@@ -126,7 +127,7 @@ async function fetchExperimentData() {
   error.value = null;
   
   try {
-    const response = await fetch(`http://localhost:5174/api/experiments/${props.experiment.id}/datapoints`);
+    const response = await fetch(getApiUrl(`/experiments/${props.experiment.id}/datapoints`));
     
     if (!response.ok) {
       throw new Error('Failed to fetch experiment data');
@@ -228,7 +229,7 @@ async function concludeExperiment() {
   const includedPoints = dataPoints.value.filter(point => point.included && point.hasData);
   
   try {
-    const response = await fetch(`http://localhost:5174/api/experiments/${props.experiment.id}/complete`, {
+    const response = await fetch(getApiUrl(`/experiments/${props.experiment.id}/complete`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

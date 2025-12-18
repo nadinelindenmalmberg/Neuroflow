@@ -1,6 +1,7 @@
 
 import os
 import json
+import logging
 import openai
 from datetime import datetime, date, timedelta, timezone
 from flask import Flask, jsonify, request
@@ -10,15 +11,22 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_apscheduler import APScheduler
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    print("✅ Environment variables loaded from .env file")
+    logger.info("Environment variables loaded from .env file")
 except ImportError:
-    print("⚠️ python-dotenv not installed. Install with: pip install python-dotenv")
+    logger.warning("python-dotenv not installed. Install with: pip install python-dotenv")
 except Exception as e:
-    print(f"⚠️ Error loading .env file: {e}")
+    logger.warning(f"Error loading .env file: {e}")
 
 # Import your models AFTER initializing db
 from models import db, Graph, DataPoint, Experiment, User, SyncLog
@@ -28,10 +36,6 @@ from utils.services.fitbit_oauth import get_fitbit_oauth
 from utils.services.fitbit_fetch_and_store import fetch_fitbit_data, clean_fitbit_data, store_fitbit_data
 from utils.services.fitbit_sync_manager import FitbitSyncManager
 from ai_analysis import openai_connection
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -48,14 +52,29 @@ CORS(app, resources={
     }
 })
 
-# Use environment variable for secret key
-app.secret_key = os.getenv('SECRET_KEY', 'your-unique-secret-key-change-in-production')
+# Use environment variable for secret key (required in production)
+secret_key = os.getenv('SECRET_KEY')
+if not secret_key:
+    logger.warning("SECRET_KEY not set. Using default (NOT SECURE FOR PRODUCTION)")
+    secret_key = 'dev-secret-key-change-in-production'
+app.secret_key = secret_key
 
+# Database configuration
 database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable is required")
 # Convert psycopg2 URL to psycopg3 format
-if database_url and database_url.startswith("postgresql://"):
+if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://")
-print(f"Using DATABASE_URL: {database_url}")
+# Log database connection (sanitized - only show host, not credentials)
+if "@" in database_url:
+    db_parts = database_url.split("@")
+    if len(db_parts) > 1:
+        logger.info(f"Connecting to database: ...@{db_parts[1]}")
+    else:
+        logger.info("Database URL configured")
+else:
+    logger.info("Database URL configured")
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Fix psycopg3 prepared statement issues
@@ -87,8 +106,9 @@ fitbit_sync_manager = FitbitSyncManager(scheduler)
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if openai_api_key and openai_api_key != "your_openai_api_key_here":
     openai.api_key = openai_api_key
+    logger.info("OpenAI API key configured")
 else:
-    print("Warning: OPENAI_API_KEY not set or invalid. AI features will be disabled.")
+    logger.warning("OPENAI_API_KEY not set or invalid. AI features will be disabled.")
     openai.api_key = None
 
 @app.route('/api/upload/process-notes', methods=['POST'])
@@ -121,9 +141,7 @@ def process_notes():
             return process_single_chunk(notes, clarifications)
             
     except Exception as e:
-        print(f"Error processing notes: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error processing notes: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to process notes"}), 500
 
 def process_large_dataset(notes, clarifications, max_chunk_size):
@@ -133,12 +151,12 @@ def process_large_dataset(notes, clarifications, max_chunk_size):
         chunks = split_notes_into_chunks(notes, max_chunk_size)
         total_chunks = len(chunks)
         
-        print(f"Processing {total_chunks} chunks for large dataset")
+        logger.info(f"Processing {total_chunks} chunks for large dataset")
         
         all_structured_data = []
         
         for i, chunk in enumerate(chunks):
-            print(f"Processing chunk {i+1}/{total_chunks}")
+            logger.debug(f"Processing chunk {i+1}/{total_chunks}")
             
             # Process each chunk
             chunk_result, status_code = process_single_chunk(chunk, clarifications)
@@ -163,7 +181,7 @@ def process_large_dataset(notes, clarifications, max_chunk_size):
         })
         
     except Exception as e:
-        print(f"Error in large dataset processing: {str(e)}")
+        logger.error(f"Error in large dataset processing: {str(e)}", exc_info=True)
         return jsonify({"error": f"Failed to process large dataset: {str(e)}"}), 500
 
 def split_notes_into_chunks(notes, max_chunk_size):
@@ -309,7 +327,7 @@ def process_single_chunk(notes, clarifications):
             
             # Extract the JSON response
             ai_response = response.choices[0].message.content.strip()
-            print(f"AI Response: {ai_response}")
+            logger.debug(f"AI Response received (length: {len(ai_response)})")
         except openai.RateLimitError as e:
             return {"error": "OpenAI rate limit exceeded. Please wait a moment and try again."}, 429
         except Exception as e:
@@ -354,7 +372,7 @@ def process_single_chunk(notes, clarifications):
             return {"error": "Failed to parse AI response as JSON"}, 500
             
     except Exception as e:
-        print(f"Error processing single chunk: {str(e)}")
+        logger.error(f"Error processing single chunk: {str(e)}", exc_info=True)
         return {"error": f"Failed to process chunk: {str(e)}"}, 500
 
 # Save structured data from uploads
@@ -392,9 +410,7 @@ def save_upload_data():
         
     except Exception as e:
         db.session.rollback()
-        print(f"Error saving upload data: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error saving upload data: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to save data"}), 500
 
 # API Routes
@@ -654,8 +670,8 @@ def save_oura_token():
         })
     except Exception as e:
         db.session.rollback()
-        print(f"Error saving Oura token: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Error saving Oura token: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Failed to save token'}), 500
 
 @app.route('/api/integrations/oura/status', methods=['GET'])
 def get_oura_status():
@@ -789,7 +805,7 @@ def sync_oura_now():
                     db.session.commit()
             except Exception as log_error:
                 db.session.rollback()
-                print(f"Failed to update sync log: {log_error}")
+                logger.error(f"Failed to update sync log: {log_error}", exc_info=True)
             
             return jsonify({'error': str(sync_error)}), 500
             
@@ -980,10 +996,10 @@ def get_detailed_sync_status():
 def get_fitbit_auth_url():
     """Get Fitbit OAuth authorization URL"""
     try:
-        # Safe runtime log - never print secrets
+        # Safe runtime log - never log secrets
         client_id = os.getenv('FITBIT_CLIENT_ID')
         redirect_uri = os.getenv('FITBIT_REDIRECT_URI')
-        print(f"🔧 Fitbit Config Check - Client ID: {client_id[:8] if client_id else 'NOT SET'}..., Redirect: {redirect_uri}")
+        logger.info(f"Fitbit Config Check - Client ID: {'SET' if client_id else 'NOT SET'}, Redirect configured: {bool(redirect_uri)}")
         
         oauth = get_fitbit_oauth()
         auth_url = oauth.get_authorization_url()
@@ -993,8 +1009,8 @@ def get_fitbit_auth_url():
             'message': 'Visit this URL to authorize Fitbit access'
         })
     except Exception as e:
-        print(f"❌ Fitbit auth URL error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Fitbit auth URL error: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to generate authorization URL'}), 500
 
 @app.route('/api/integrations/fitbit/callback', methods=['POST'])
 def fitbit_oauth_callback():
@@ -1003,33 +1019,33 @@ def fitbit_oauth_callback():
         data = request.get_json()
         authorization_code = data.get('code')
         
-        print(f"🔍 Fitbit OAuth Callback - Received code: {authorization_code[:10] if authorization_code else 'None'}...")
+        logger.info("Fitbit OAuth Callback - Received authorization code")
         
         if not authorization_code:
-            print("❌ No authorization code provided")
+            logger.warning("No authorization code provided in Fitbit callback")
             return jsonify({'error': 'Authorization code is required'}), 400
         
         # Exchange code for tokens
         oauth = get_fitbit_oauth()
-        print("🔄 Exchanging code for tokens...")
+        logger.info("Exchanging Fitbit authorization code for tokens")
         token_result = oauth.exchange_code_for_tokens(authorization_code)
         
-        print(f"🔍 Token exchange result: {token_result}")
+        logger.debug(f"Token exchange result: {'success' if token_result['success'] else 'failed'}")
         
         if not token_result['success']:
-            print(f"❌ Token exchange failed: {token_result['error']}")
+            logger.error(f"Token exchange failed: {token_result.get('error', 'Unknown error')}")
             return jsonify({'error': token_result['error']}), 400
         
         # Save tokens to user (for now, use default user)
         user = User.query.first()
         if not user:
-            print("❌ No user found in database")
+            logger.error("No user found in database for Fitbit token storage")
             return jsonify({'error': 'No user found'}), 404
         
-        print(f"✅ Found user: {user.id}")
+        logger.info(f"Found user: {user.id} for token storage")
         
         # Calculate token expiration
-        expires_at = datetime.utcnow() + timedelta(seconds=token_result['expires_in'])
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=token_result['expires_in'])
         
         # Save Fitbit tokens
         user.fitbit_access_token = token_result['access_token']
@@ -1037,12 +1053,10 @@ def fitbit_oauth_callback():
         user.fitbit_token_expires_at = expires_at
         user.fitbit_user_id = token_result.get('user_id')
         
-        print(f"💾 Saving tokens - Access token: {token_result['access_token'][:20]}...")
-        print(f"💾 User ID: {token_result.get('user_id')}")
-        print(f"💾 Expires at: {expires_at}")
+        logger.info(f"Saving Fitbit tokens for user {user.id}, expires at: {expires_at}")
         
         db.session.commit()
-        print("✅ Tokens saved successfully!")
+        logger.info("Fitbit tokens saved successfully")
         
         return jsonify({
             'success': True,
@@ -1051,9 +1065,9 @@ def fitbit_oauth_callback():
         })
         
     except Exception as e:
-        print(f"❌ Error in Fitbit OAuth callback: {str(e)}")
+        logger.error(f"Error in Fitbit OAuth callback: {str(e)}", exc_info=True)
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Failed to process OAuth callback'}), 500
 
 @app.route('/api/integrations/fitbit/status', methods=['GET'])
 def get_fitbit_status():
@@ -1083,26 +1097,22 @@ def sync_fitbit_now():
     """Manually trigger Fitbit sync"""
     try:
         user = User.query.first()
-        print(f"🔍 Sync request - User found: {bool(user)}")
+        logger.debug(f"Sync request - User found: {bool(user)}")
         
         if not user:
-            print("❌ No user found")
+            logger.warning("No user found for Fitbit sync")
             return jsonify({'error': 'No user found'}), 404
             
         if not user.fitbit_access_token:
-            print("❌ No Fitbit access token found")
-            print(f"🔍 User has access token: {bool(user.fitbit_access_token)}")
-            print(f"🔍 User has refresh token: {bool(user.fitbit_refresh_token)}")
-            print(f"🔍 User Fitbit ID: {user.fitbit_user_id}")
+            logger.warning(f"No Fitbit access token found for user {user.id if user else 'unknown'}")
             return jsonify({'error': 'No Fitbit access token found'}), 400
         
-        print(f"✅ Starting sync for user {user.id}")
-        print(f"🔍 Access token (first 20 chars): {user.fitbit_access_token[:20]}...")
+        logger.info(f"Starting Fitbit sync for user {user.id}")
         
         # Run sync
         result = fitbit_sync_manager.run_user_sync(user.id)
         
-        print(f"🔍 Sync result: {result}")
+        logger.info(f"Fitbit sync completed: {'success' if result.get('success') else 'failed'}")
         
         if result['success']:
             return jsonify({
@@ -1132,7 +1142,7 @@ def sync_fitbit_steps_only():
                 'message': 'No Fitbit access token found'
             }), 401
         
-        print("🚶 Fetching today's steps from Fitbit...")
+        logger.info("Fetching today's steps from Fitbit")
         
         # Get today's date
         today = datetime.now().date()
@@ -1153,7 +1163,7 @@ def sync_fitbit_steps_only():
         
         # Extract steps from summary
         steps = activity_data['summary'].get('steps', 0)
-        print(f"📊 Today's steps: {steps}")
+        logger.info(f"Today's steps from Fitbit: {steps}")
         
         # Store in database
         from models import Graph, DataPoint
@@ -1179,7 +1189,7 @@ def sync_fitbit_steps_only():
         if existing_dp:
             # Update existing
             existing_dp.value = float(steps)
-            print(f"🔄 Updated existing steps record: {steps}")
+            logger.debug(f"Updated existing steps record: {steps}")
         else:
             # Create new
             new_dp = DataPoint(
@@ -1189,7 +1199,7 @@ def sync_fitbit_steps_only():
                 graph_id=fitbit_graph.id
             )
             db.session.add(new_dp)
-            print(f"➕ Created new steps record: {steps}")
+            logger.debug(f"Created new steps record: {steps}")
         
         db.session.commit()
         
@@ -1201,7 +1211,7 @@ def sync_fitbit_steps_only():
         })
         
     except Exception as e:
-        print(f"❌ Steps sync error: {e}")
+        logger.error(f"Steps sync error: {e}", exc_info=True)
         db.session.rollback()
         return jsonify({
             'status': 'error',
@@ -1248,7 +1258,7 @@ def fitbit_test_simple():
         else:
             # Try to refresh token if expired
             if 'expired' in message.lower() or 'invalid' in message.lower():
-                print("🔄 Token expired, attempting refresh...")
+                logger.info("Token expired, attempting refresh")
                 oauth = get_fitbit_oauth()
                 refresh_result = oauth.refresh_access_token(user.fitbit_refresh_token)
                 
@@ -1256,7 +1266,7 @@ def fitbit_test_simple():
                     # Update tokens
                     user.fitbit_access_token = refresh_result['access_token']
                     user.fitbit_refresh_token = refresh_result['refresh_token']
-                    user.fitbit_token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result['expires_in'])
+                    user.fitbit_token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=refresh_result['expires_in'])
                     db.session.commit()
                     
                     # Retry with new token
@@ -1276,7 +1286,7 @@ def fitbit_test_simple():
             }), 401
             
     except Exception as e:
-        print(f"❌ Fitbit test error: {e}")
+        logger.error(f"Fitbit test error: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -1802,7 +1812,7 @@ def complete_experiment(experiment_id):
         
         # You could store this in a new field if you add one to the model
         # For now, we'll just log it
-        print(f"Experiment {experiment_id} completed: {completion_data}")
+        logger.info(f"Experiment {experiment_id} completed")
         
         db.session.commit()
         
@@ -2357,15 +2367,15 @@ def get_recent_metrics():
 def get_dashboard_metric_values():
     """Get current values for selected dashboard metrics"""
     try:
-        print("🔍 DEBUG: Dashboard metrics/values endpoint called")
+        logger.debug("Dashboard metrics/values endpoint called")
         # Get user's selected metrics
         user = User.query.first()
         if not user or not user.selected_dashboard_metrics:
-            print("🔍 DEBUG: No user or no selected metrics")
+            logger.debug("No user or no selected metrics")
             return jsonify({'metric_values': {}})
         
         selected_metrics = json.loads(user.selected_dashboard_metrics)
-        print(f"🔍 DEBUG: Selected metrics: {selected_metrics}")
+        logger.debug(f"Selected metrics: {len(selected_metrics)} metrics")
         metric_values = {}
         
         # Get latest values for each selected metric
